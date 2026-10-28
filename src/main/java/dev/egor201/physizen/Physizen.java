@@ -54,7 +54,10 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
     public World getWorld(String worldId) {
         World w = worldAttachments.get(worldId);
-        return w != null ? w : Bukkit.getWorld(worldId);
+        if (w != null) return w;
+        w = Bukkit.getWorld(worldId);
+        if (w != null) return w;
+        return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
     }
 
     private boolean checkDenizenM() {
