@@ -22,7 +22,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class TerrainManager {
 
     private static final int TILE_SIZE = 16;
-    private static final int TILE_MASK = 15;
     private static final int TILE_SHIFT = 4;
 
     private static class TileKey {
@@ -80,89 +79,110 @@ public class TerrainManager {
         snapshotCache.clear();
         Set<TileKey> neededTiles = new HashSet<>();
 
-        for (PhysWorld world : engine.worlds()) {
-            World bukkitWorld = Physizen.getInstance().getWorld(world.id);
-            if (bukkitWorld == null) continue;
+        try {
+            for (PhysWorld world : engine.worlds()) {
+                World bukkitWorld = Physizen.getInstance().getWorld(world.id);
+                if (bukkitWorld == null) continue;
 
-            for (PhysBody body : world.bodies()) {
-                if (body.def.type == MotionKind.STATIC) continue;
-                Snapshot s = body.snapshot;
-                if (!s.active) continue;
+                int worldMinTy = bukkitWorld.getMinHeight() >> TILE_SHIFT;
+                int worldMaxTy = (bukkitWorld.getMaxHeight() - 1) >> TILE_SHIFT;
 
-                int minTx = ((int) Math.floor(s.minX)) >> TILE_SHIFT;
-                int maxTx = ((int) Math.floor(s.maxX)) >> TILE_SHIFT;
-                int minTy = Math.max(bukkitWorld.getMinHeight() >> TILE_SHIFT, ((int) Math.floor(s.minY)) >> TILE_SHIFT);
-                int maxTy = Math.min((bukkitWorld.getMaxHeight() - 1) >> TILE_SHIFT, ((int) Math.floor(s.maxY)) >> TILE_SHIFT);
-                int minTz = ((int) Math.floor(s.minZ)) >> TILE_SHIFT;
-                int maxTz = ((int) Math.floor(s.maxZ)) >> TILE_SHIFT;
+                for (PhysBody body : world.bodies()) {
+                    if (body.def.type == MotionKind.STATIC) continue;
+                    Snapshot s = body.snapshot;
 
-                for (int x = minTx - 1; x <= maxTx + 1; x++) {
-                    for (int y = minTy - 1; y <= maxTy + 1; y++) {
-                        for (int z = minTz - 1; z <= maxTz + 1; z++) {
-                            neededTiles.add(new TileKey(world.id, x, y, z));
+                    int minTx = ((int) Math.floor(s.minX)) >> TILE_SHIFT;
+                    int maxTx = ((int) Math.floor(s.maxX)) >> TILE_SHIFT;
+
+                    int rawMinTy = ((int) Math.floor(s.minY - 0.5)) >> TILE_SHIFT;
+                    int rawMaxTy = ((int) Math.floor(s.maxY + 0.5)) >> TILE_SHIFT;
+
+                    int minTy = Math.max(worldMinTy, Math.min(worldMaxTy, rawMinTy - 1));
+                    int maxTy = Math.max(worldMinTy, Math.min(worldMaxTy, rawMaxTy + 1));
+
+                    int minTz = ((int) Math.floor(s.minZ)) >> TILE_SHIFT;
+                    int maxTz = ((int) Math.floor(s.maxZ)) >> TILE_SHIFT;
+
+                    for (int x = minTx - 1; x <= maxTx + 1; x++) {
+                        for (int y = minTy; y <= maxTy; y++) {
+                            for (int z = minTz - 1; z <= maxTz + 1; z++) {
+                                neededTiles.add(new TileKey(world.id, x, y, z));
+                            }
                         }
                     }
                 }
             }
-        }
 
-        int snapshotBudget = 8;
-        for (TileKey key : neededTiles) {
-            TileData tile = activeTiles.get(key);
-            World bukkitWorld = Physizen.getInstance().getWorld(key.worldId);
-            if (bukkitWorld == null) continue;
+            int snapshotBudget = 16;
+            for (TileKey key : neededTiles) {
+                TileData tile = activeTiles.get(key);
+                World bukkitWorld = Physizen.getInstance().getWorld(key.worldId);
+                if (bukkitWorld == null) continue;
 
-            int chunkX = key.tx;
-            int chunkZ = key.tz;
-            long chunkKey = (((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL);
+                if (tile != null && (currentStep % 20 != 0)) {
+                    tile.lastSeenStep = currentStep;
+                    continue;
+                }
 
-            ChunkSnapshot chunk = snapshotCache.get(chunkKey);
-            if (chunk == null) {
-                if (snapshotBudget <= 0) continue;
-                if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
-                chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
-                snapshotCache.put(chunkKey, chunk);
-                snapshotBudget--;
-            }
+                int chunkX = key.tx;
+                int chunkZ = key.tz;
+                long chunkKey = (((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL);
 
-            int hash = computeTileHash(chunk, key.ty);
-            if (tile == null) {
-                if (hash == 0) continue;
-                String bodyName = "__terrain_" + key.tx + "_" + key.ty + "_" + key.tz;
-                tile = new TileData(key, bodyName);
-                tile.blockHash = hash;
-                tile.lastSeenStep = currentStep;
-                rebuildTile(key, tile, chunk, bukkitWorld);
-                activeTiles.put(key, tile);
-            } else {
-                tile.lastSeenStep = currentStep;
-                if (tile.blockHash != hash) {
+                ChunkSnapshot chunk = snapshotCache.get(chunkKey);
+                if (chunk == null) {
+                    if (snapshotBudget <= 0 && tile == null) continue;
+                    if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
+                    chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
+                    snapshotCache.put(chunkKey, chunk);
+                    snapshotBudget--;
+                }
+
+                int hash = computeTileHash(chunk, key.ty, bukkitWorld);
+                if (tile == null) {
+                    if (hash == 0) continue;
+                    String bodyName = "__terrain_" + key.tx + "_" + key.ty + "_" + key.tz;
+                    tile = new TileData(key, bodyName);
                     tile.blockHash = hash;
+                    tile.lastSeenStep = currentStep;
                     rebuildTile(key, tile, chunk, bukkitWorld);
+                    activeTiles.put(key, tile);
+                } else {
+                    tile.lastSeenStep = currentStep;
+                    if (tile.blockHash != hash) {
+                        tile.blockHash = hash;
+                        rebuildTile(key, tile, chunk, bukkitWorld);
+                    }
                 }
             }
-        }
 
-        Iterator<Map.Entry<TileKey, TileData>> it = activeTiles.entrySet().iterator();
-        while (it.hasNext()) {
-            Map.Entry<TileKey, TileData> entry = it.next();
-            TileData tile = entry.getValue();
-            if (currentStep - tile.lastSeenStep > 100) {
-                PhysWorld pw = engine.world(tile.key.worldId);
-                if (pw != null) {
-                    pw.removeBody(tile.bodyName);
+            Iterator<Map.Entry<TileKey, TileData>> it = activeTiles.entrySet().iterator();
+            while (it.hasNext()) {
+                Map.Entry<TileKey, TileData> entry = it.next();
+                TileData tile = entry.getValue();
+                if (currentStep - tile.lastSeenStep > 300) {
+                    PhysWorld pw = engine.world(tile.key.worldId);
+                    if (pw != null) {
+                        pw.removeBody(tile.bodyName);
+                    }
+                    it.remove();
                 }
-                it.remove();
             }
+        } catch (Throwable t) {
+            Physizen.getInstance().getLogger().warning("Terrain tick warning: " + t.getMessage());
         }
     }
 
-    private int computeTileHash(ChunkSnapshot chunk, int ty) {
+    private int computeTileHash(ChunkSnapshot chunk, int ty, World world) {
         int hash = 1;
         int baseY = ty << TILE_SHIFT;
+        int minH = world.getMinHeight();
+        int maxH = world.getMaxHeight();
         boolean hasAny = false;
+
         for (int y = 0; y < TILE_SIZE; y++) {
             int actualY = baseY + y;
+            if (actualY < minH || actualY >= maxH) continue;
+
             for (int x = 0; x < TILE_SIZE; x++) {
                 for (int z = 0; z < TILE_SIZE; z++) {
                     Material mat = chunk.getBlockType(x, actualY, z);
@@ -189,6 +209,9 @@ public class TerrainManager {
         int baseY = key.ty << TILE_SHIFT;
         int baseZ = key.tz << TILE_SHIFT;
 
+        int minH = bukkitWorld.getMinHeight();
+        int maxH = bukkitWorld.getMaxHeight();
+
         ShapeSpec compound = new ShapeSpec();
         compound.kind = ShapeSpec.Kind.COMPOUND;
 
@@ -197,6 +220,8 @@ public class TerrainManager {
 
         for (int y = 0; y < TILE_SIZE; y++) {
             int actualY = baseY + y;
+            if (actualY < minH || actualY >= maxH) continue;
+
             for (int x = 0; x < TILE_SIZE; x++) {
                 for (int z = 0; z < TILE_SIZE; z++) {
                     BlockData data = chunk.getBlockData(x, actualY, z);
