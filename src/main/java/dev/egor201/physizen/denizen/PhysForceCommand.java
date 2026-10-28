@@ -33,7 +33,7 @@ public class PhysForceCommand extends AbstractCommand {
             if (!scriptEntry.hasObject("action")) {
                 scriptEntry.addObject("action", arg.asElement());
             }
-            else if (!scriptEntry.hasObject("body") && arg.matchesPrefix("body", "name")) {
+            else if (!scriptEntry.hasObject("body") && (arg.matchesPrefix("body", "name") || !arg.hasPrefix())) {
                 scriptEntry.addObject("body", arg.asElement());
             }
             else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
