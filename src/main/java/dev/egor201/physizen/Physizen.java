@@ -113,6 +113,20 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         ObjectFetcher.registerWithObjectFetcher(PhysBodyTag.class, PhysBodyTag.tagProcessor);
         PhysWorldTag.register();
         PhysBodyTag.register();
+        
+        com.denizenscript.denizencore.tags.TagManager.registerTagHandler(PhysWorldTag.class, "physworld", (attribute) -> {
+            if (!attribute.hasParam()) {
+                return null;
+            }
+            return PhysWorldTag.valueOf(attribute.getParam(), attribute.context);
+        });
+
+        com.denizenscript.denizencore.tags.TagManager.registerTagHandler(PhysBodyTag.class, "physbody", (attribute) -> {
+            if (!attribute.hasParam()) {
+                return null;
+            }
+            return PhysBodyTag.valueOf(attribute.getParam(), attribute.context);
+        });
 
         DenizenCore.commandRegistry.registerCommand(PhysWorldCommand.class);
         DenizenCore.commandRegistry.registerCommand(PhysBodyCommand.class);
