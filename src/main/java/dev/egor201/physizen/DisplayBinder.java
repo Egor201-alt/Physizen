@@ -184,9 +184,11 @@ public class DisplayBinder {
                                 Vector3f rotatedHalf = totalRot.transform(halfScale, new Vector3f());
                                 Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset), new Vector3f());
                                 translation.set(worldOffset).sub(rotatedHalf);
-                            } else {
-                                translation.set(bodyRot.transform(new Vector3f(b.offset), new Vector3f()));
-                            }
+                                } else {
+                                    Vector3f scaledOffset = new Vector3f(b.offset).mul(b.scale);
+                                    Vector3f rotatedOffset = totalRot.transform(scaledOffset, new Vector3f());
+                                    translation.set(rotatedOffset);
+                                }
 
                             Transformation transform = new Transformation(
                                     translation,
