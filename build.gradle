@@ -23,10 +23,6 @@ repositories {
         name = 'citizens-repo'
         url = 'https://maven.citizensnpcs.co/repo'
     }
-    maven {
-        name = 'jitpack'
-        url = 'https://jitpack.io'
-    }
 }
 
 ext {
@@ -42,10 +38,7 @@ dependencies {
         transitive = false
     }
 
-    // Jolt JNI Java Classes
-    implementation "com.github.stephengold:jolt-jni:${joltVersion}"
-
-    // Jolt Natives
+    // Jolt Natives & Classes
     implementation "com.github.stephengold:jolt-jni-Linux64:${joltVersion}:ReleaseSp"
     implementation "com.github.stephengold:jolt-jni-Linux64_fma:${joltVersion}:ReleaseSp"
     implementation "com.github.stephengold:jolt-jni-Windows64:${joltVersion}:ReleaseSp"
