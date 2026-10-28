@@ -175,8 +175,19 @@ public class PhysBodyCommand extends AbstractCommand {
                             double[] s = Util.vec(scriptEntry.getObjectTag("scale"), scriptEntry.context);
                             binding.scale = new Vector3f((float) s[0], (float) s[1], (float) s[2]);
                         }
-                        binding.interpolationDuration = (int) Util.num(scriptEntry.getObjectTag("interpolation"), 1);
-                        binding.teleportDuration = (int) Util.num(scriptEntry.getObjectTag("teleport_duration"), 1);
+
+                        ObjectTag interp = scriptEntry.hasObject("interpolation_duration") 
+                                ? scriptEntry.getObjectTag("interpolation_duration") 
+                                : scriptEntry.getObjectTag("interpolation");
+                        binding.interpolationDuration = (int) Util.num(interp, 3);
+
+                        binding.teleportDuration = (int) Util.num(scriptEntry.getObjectTag("teleport_duration"), 3);
+
+                        ObjectTag start = scriptEntry.hasObject("interpolation_start") 
+                                ? scriptEntry.getObjectTag("interpolation_start") 
+                                : scriptEntry.getObjectTag("interpolation_delay");
+                        binding.interpolationStart = (int) Util.num(start, 0);
+
                         binding.removeWithBody = Util.bool(scriptEntry.getObjectTag("remove_with_body"), true);
                         Physizen.getInstance().getDisplayBinder().bind(worldId, name, binding);
                     }
