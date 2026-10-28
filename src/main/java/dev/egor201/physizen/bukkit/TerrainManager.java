@@ -12,14 +12,23 @@ import org.bukkit.ChunkSnapshot;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
+import org.bukkit.block.Block;
 import org.bukkit.block.data.BlockData;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
+import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockPlaceEvent;
+import org.bukkit.event.entity.EntityChangeBlockEvent;
+import org.bukkit.event.entity.EntityExplodeEvent;
 import org.bukkit.util.BoundingBox;
 import org.bukkit.util.VoxelShape;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class TerrainManager {
+public class TerrainManager implements Listener {
 
     private static final int TILE_SIZE = 16;
     private static final int TILE_SHIFT = 4;
@@ -60,6 +69,7 @@ public class TerrainManager {
         final String bodyName;
         long lastSeenStep;
         int blockHash;
+        boolean dirty = false;
         PhysBody body;
 
         TileData(TileKey key, String bodyName) {
@@ -71,6 +81,69 @@ public class TerrainManager {
     private final Map<TileKey, TileData> activeTiles = new ConcurrentHashMap<>();
     private final Map<BlockData, List<BoundingBox>> shapeCache = new ConcurrentHashMap<>();
     private final Map<Long, ChunkSnapshot> snapshotCache = new HashMap<>();
+
+    public void invalidateBlock(Location loc) {
+        if (loc == null || loc.getWorld() == null) return;
+        World w = loc.getWorld();
+        int tx = loc.getBlockX() >> TILE_SHIFT;
+        int ty = loc.getBlockY() >> TILE_SHIFT;
+        int tz = loc.getBlockZ() >> TILE_SHIFT;
+
+        PhysEngine engine = PhysEngine.get();
+        if (engine == null) return;
+
+        for (PhysWorld pw : engine.worlds()) {
+            World attached = Physizen.getInstance().getWorld(pw.id);
+            if (attached == null || !attached.getName().equals(w.getName())) continue;
+
+            TileKey key = new TileKey(pw.id, tx, ty, tz);
+            TileData tile = activeTiles.get(key);
+            if (tile != null) {
+                tile.dirty = true;
+                tile.blockHash = 0;
+            }
+
+            int baseX = tx << TILE_SHIFT;
+            int baseY = ty << TILE_SHIFT;
+            int baseZ = tz << TILE_SHIFT;
+            double[] min = {baseX - 1, baseY - 1, baseZ - 1};
+            double[] max = {baseX + TILE_SIZE + 1, baseY + TILE_SIZE + 2, baseZ + TILE_SIZE + 1};
+            for (PhysBody pb : pw.inBox(min, max)) {
+                if (pb.def.type != MotionKind.STATIC && !pb.def.internal) {
+                    pb.activate();
+                }
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockBreak(BlockBreakEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockPlace(BlockPlaceEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onExplosion(BlockExplodeEvent event) {
+        for (Block b : event.blockList()) {
+            invalidateBlock(b.getLocation());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityExplosion(EntityExplodeEvent event) {
+        for (Block b : event.blockList()) {
+            invalidateBlock(b.getLocation());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntityChangeBlock(EntityChangeBlockEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
 
     public void tick(long currentStep) {
         PhysEngine engine = PhysEngine.get();
@@ -119,7 +192,7 @@ public class TerrainManager {
                 World bukkitWorld = Physizen.getInstance().getWorld(key.worldId);
                 if (bukkitWorld == null) continue;
 
-                if (tile != null && (currentStep % 20 != 0)) {
+                if (tile != null && !tile.dirty && (currentStep % 20 != 0)) {
                     tile.lastSeenStep = currentStep;
                     continue;
                 }
@@ -148,7 +221,8 @@ public class TerrainManager {
                     activeTiles.put(key, tile);
                 } else {
                     tile.lastSeenStep = currentStep;
-                    if (tile.blockHash != hash) {
+                    if (tile.dirty || tile.blockHash != hash) {
+                        tile.dirty = false;
                         tile.blockHash = hash;
                         rebuildTile(key, tile, chunk, bukkitWorld);
                     }
