@@ -80,6 +80,7 @@ public class TerrainManager implements Listener {
     private final Map<TileKey, TileData> activeTiles = new ConcurrentHashMap<>();
     private final Map<BlockData, List<BoundingBox>> shapeCache = new ConcurrentHashMap<>();
     private final Set<TileKey> dirtyTiles = Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private final Map<Long, ChunkSnapshot> snapshotCache = new HashMap<>();
 
     public void invalidateBlock(Location loc) {
         if (loc == null || loc.getWorld() == null) return;
@@ -148,6 +149,8 @@ public class TerrainManager implements Listener {
         PhysEngine engine = PhysEngine.get();
         if (engine == null) return;
 
+        snapshotCache.clear();
+
         try {
             boolean hasActiveBodies = false;
             Set<TileKey> neededTiles = new HashSet<>();
@@ -200,7 +203,7 @@ public class TerrainManager implements Listener {
                 return;
             }
 
-            int snapshotBudget = 8;
+            int snapshotBudget = 16;
             for (TileKey key : neededTiles) {
                 TileData tile = activeTiles.get(key);
                 World bukkitWorld = Physizen.getInstance().getWorld(key.worldId);
@@ -212,21 +215,24 @@ public class TerrainManager implements Listener {
 
                 int chunkX = key.tx;
                 int chunkZ = key.tz;
+                long chunkKey = (((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL);
 
-                if (snapshotBudget <= 0 && tile == null) continue;
-                if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
+                ChunkSnapshot chunk = snapshotCache.get(chunkKey);
+                if (chunk == null) {
+                    if (snapshotBudget <= 0 && tile == null) continue;
+                    if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
 
-                ChunkSnapshot chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
-                snapshotBudget--;
+                    chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
+                    snapshotCache.put(chunkKey, chunk);
+                    snapshotBudget--;
+                }
 
                 if (tile == null) {
                     String bodyName = "__terrain_" + key.tx + "_" + key.ty + "_" + key.tz;
                     tile = new TileData(key, bodyName);
                     tile.lastSeenStep = currentStep;
                     rebuildTile(key, tile, chunk, bukkitWorld);
-                    if (tile.body != null) {
-                        activeTiles.put(key, tile);
-                    }
+                    activeTiles.put(key, tile);
                 } else if (tile.dirty) {
                     tile.dirty = false;
                     tile.lastSeenStep = currentStep;
@@ -252,7 +258,9 @@ public class TerrainManager implements Listener {
                                 tile.lastSeenStep = currentStep;
                                 continue;
                             }
-                            pw.removeBody(tile.bodyName);
+                            if (tile.body != null) {
+                                pw.removeBody(tile.bodyName);
+                            }
                         }
                         it.remove();
                     }
