@@ -25,8 +25,8 @@ public class DisplayBinder {
         public Quaternionf rotationOffset = new Quaternionf();
         public Quaternionf lastAppliedRot = new Quaternionf();
         public Quaternionf lastSentRot = new Quaternionf(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
-        public int interpolationDuration = 3;
-        public int teleportDuration = 3;
+        public int interpolationDuration = 1;
+        public int teleportDuration = 1;
         public int interpolationStart = 0;
         public boolean removeWithBody = true;
 
