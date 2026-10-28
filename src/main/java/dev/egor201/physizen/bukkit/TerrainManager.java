@@ -68,7 +68,6 @@ public class TerrainManager implements Listener {
         final TileKey key;
         final String bodyName;
         long lastSeenStep;
-        int blockHash;
         boolean dirty = false;
         PhysBody body;
 
@@ -80,7 +79,7 @@ public class TerrainManager implements Listener {
 
     private final Map<TileKey, TileData> activeTiles = new ConcurrentHashMap<>();
     private final Map<BlockData, List<BoundingBox>> shapeCache = new ConcurrentHashMap<>();
-    private final Map<Long, ChunkSnapshot> snapshotCache = new HashMap<>();
+    private final Set<TileKey> dirtyTiles = Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     public void invalidateBlock(Location loc) {
         if (loc == null || loc.getWorld() == null) return;
@@ -100,14 +99,14 @@ public class TerrainManager implements Listener {
             TileData tile = activeTiles.get(key);
             if (tile != null) {
                 tile.dirty = true;
-                tile.blockHash = 0;
+                dirtyTiles.add(key);
             }
 
             int baseX = tx << TILE_SHIFT;
             int baseY = ty << TILE_SHIFT;
             int baseZ = tz << TILE_SHIFT;
             double[] min = {baseX - 1, baseY - 1, baseZ - 1};
-            double[] max = {baseX + TILE_SIZE + 1, baseY + TILE_SIZE + 2, baseZ + TILE_SIZE + 1};
+            double[] max = {baseX + TILE_SIZE + 1, baseY + TILE_SIZE + 3, baseZ + TILE_SIZE + 1};
             for (PhysBody pb : pw.inBox(min, max)) {
                 if (pb.def.type != MotionKind.STATIC && !pb.def.internal) {
                     pb.activate();
@@ -149,10 +148,10 @@ public class TerrainManager implements Listener {
         PhysEngine engine = PhysEngine.get();
         if (engine == null) return;
 
-        snapshotCache.clear();
-        Set<TileKey> neededTiles = new HashSet<>();
-
         try {
+            boolean hasActiveBodies = false;
+            Set<TileKey> neededTiles = new HashSet<>();
+
             for (PhysWorld world : engine.worlds()) {
                 World bukkitWorld = Physizen.getInstance().getWorld(world.id);
                 if (bukkitWorld == null) continue;
@@ -163,6 +162,9 @@ public class TerrainManager implements Listener {
                 for (PhysBody body : world.bodies()) {
                     if (body.def.type == MotionKind.STATIC) continue;
                     Snapshot s = body.snapshot;
+
+                    if (!s.active) continue;
+                    hasActiveBodies = true;
 
                     int minTx = ((int) Math.floor(s.minX)) >> TILE_SHIFT;
                     int maxTx = ((int) Math.floor(s.maxX)) >> TILE_SHIFT;
@@ -179,95 +181,86 @@ public class TerrainManager implements Listener {
                     for (int x = minTx - 1; x <= maxTx + 1; x++) {
                         for (int y = minTy; y <= maxTy; y++) {
                             for (int z = minTz - 1; z <= maxTz + 1; z++) {
-                                neededTiles.add(new TileKey(world.id, x, y, z));
+                                TileKey key = new TileKey(world.id, x, y, z);
+                                neededTiles.add(key);
+                                TileData existing = activeTiles.get(key);
+                                if (existing != null) {
+                                    existing.lastSeenStep = currentStep;
+                                }
                             }
                         }
                     }
                 }
             }
 
-            int snapshotBudget = 16;
+            neededTiles.addAll(dirtyTiles);
+            dirtyTiles.clear();
+
+            if (neededTiles.isEmpty() && !hasActiveBodies && (currentStep % 100 != 0)) {
+                return;
+            }
+
+            int snapshotBudget = 8;
             for (TileKey key : neededTiles) {
                 TileData tile = activeTiles.get(key);
                 World bukkitWorld = Physizen.getInstance().getWorld(key.worldId);
                 if (bukkitWorld == null) continue;
 
-                if (tile != null && !tile.dirty && (currentStep % 20 != 0)) {
-                    tile.lastSeenStep = currentStep;
+                if (tile != null && !tile.dirty) {
                     continue;
                 }
 
                 int chunkX = key.tx;
                 int chunkZ = key.tz;
-                long chunkKey = (((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL);
 
-                ChunkSnapshot chunk = snapshotCache.get(chunkKey);
-                if (chunk == null) {
-                    if (snapshotBudget <= 0 && tile == null) continue;
-                    if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
-                    chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
-                    snapshotCache.put(chunkKey, chunk);
-                    snapshotBudget--;
-                }
+                if (snapshotBudget <= 0 && tile == null) continue;
+                if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
 
-                int hash = computeTileHash(chunk, key.ty, bukkitWorld);
+                ChunkSnapshot chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
+                snapshotBudget--;
+
                 if (tile == null) {
-                    if (hash == 0) continue;
                     String bodyName = "__terrain_" + key.tx + "_" + key.ty + "_" + key.tz;
                     tile = new TileData(key, bodyName);
-                    tile.blockHash = hash;
                     tile.lastSeenStep = currentStep;
                     rebuildTile(key, tile, chunk, bukkitWorld);
-                    activeTiles.put(key, tile);
-                } else {
-                    tile.lastSeenStep = currentStep;
-                    if (tile.dirty || tile.blockHash != hash) {
-                        tile.dirty = false;
-                        tile.blockHash = hash;
-                        rebuildTile(key, tile, chunk, bukkitWorld);
+                    if (tile.body != null) {
+                        activeTiles.put(key, tile);
                     }
+                } else if (tile.dirty) {
+                    tile.dirty = false;
+                    tile.lastSeenStep = currentStep;
+                    rebuildTile(key, tile, chunk, bukkitWorld);
                 }
             }
 
-            Iterator<Map.Entry<TileKey, TileData>> it = activeTiles.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<TileKey, TileData> entry = it.next();
-                TileData tile = entry.getValue();
-                if (currentStep - tile.lastSeenStep > 300) {
-                    PhysWorld pw = engine.world(tile.key.worldId);
-                    if (pw != null) {
-                        pw.removeBody(tile.bodyName);
+            if (currentStep % 200 == 0) {
+                Iterator<Map.Entry<TileKey, TileData>> it = activeTiles.entrySet().iterator();
+                while (it.hasNext()) {
+                    Map.Entry<TileKey, TileData> entry = it.next();
+                    TileData tile = entry.getValue();
+                    if (currentStep - tile.lastSeenStep > 400) {
+                        PhysWorld pw = engine.world(tile.key.worldId);
+                        if (pw != null) {
+                            int baseX = tile.key.tx << TILE_SHIFT;
+                            int baseY = tile.key.ty << TILE_SHIFT;
+                            int baseZ = tile.key.tz << TILE_SHIFT;
+                            double[] min = {baseX, baseY, baseZ};
+                            double[] max = {baseX + TILE_SIZE, baseY + TILE_SIZE, baseZ + TILE_SIZE};
+
+                            if (!pw.inBox(min, max).isEmpty()) {
+                                tile.lastSeenStep = currentStep;
+                                continue;
+                            }
+                            pw.removeBody(tile.bodyName);
+                        }
+                        it.remove();
                     }
-                    it.remove();
                 }
             }
         } catch (Throwable t) {
             Physizen.getInstance().getLogger().warning("Terrain tick warning: " + t.getMessage());
         }
-    }
-
-    private int computeTileHash(ChunkSnapshot chunk, int ty, World world) {
-        int hash = 1;
-        int baseY = ty << TILE_SHIFT;
-        int minH = world.getMinHeight();
-        int maxH = world.getMaxHeight();
-        boolean hasAny = false;
-
-        for (int y = 0; y < TILE_SIZE; y++) {
-            int actualY = baseY + y;
-            if (actualY < minH || actualY >= maxH) continue;
-
-            for (int x = 0; x < TILE_SIZE; x++) {
-                for (int z = 0; z < TILE_SIZE; z++) {
-                    Material mat = chunk.getBlockType(x, actualY, z);
-                    if (!mat.isAir() && mat.isSolid()) {
-                        hash = 31 * hash + mat.hashCode();
-                        hasAny = true;
-                    }
-                }
-            }
-        }
-        return hasAny ? hash : 0;
     }
 
     private void rebuildTile(TileKey key, TileData tile, ChunkSnapshot chunk, World bukkitWorld) {
@@ -291,6 +284,7 @@ public class TerrainManager implements Listener {
 
         boolean[][][] fullCubes = new boolean[TILE_SIZE][TILE_SIZE][TILE_SIZE];
         boolean[][][] visited = new boolean[TILE_SIZE][TILE_SIZE][TILE_SIZE];
+        boolean hasAnyBlocks = false;
 
         for (int y = 0; y < TILE_SIZE; y++) {
             int actualY = baseY + y;
@@ -304,6 +298,7 @@ public class TerrainManager implements Listener {
                     List<BoundingBox> boxes = getBlockBoxes(data, bukkitWorld, baseX + x, actualY, baseZ + z);
                     if (boxes.isEmpty()) continue;
 
+                    hasAnyBlocks = true;
                     if (boxes.size() == 1 && isFullCube(boxes.get(0))) {
                         fullCubes[x][y][z] = true;
                     } else {
@@ -318,6 +313,8 @@ public class TerrainManager implements Listener {
                 }
             }
         }
+
+        if (!hasAnyBlocks) return;
 
         for (int y = 0; y < TILE_SIZE; y++) {
             for (int x = 0; x < TILE_SIZE; x++) {
