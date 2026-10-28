@@ -158,8 +158,12 @@ public class DisplayBinder {
 
                         Quaternionf totalRot = new Quaternionf(bodyRot).mul(b.rotationOffset);
 
-                        if (b.lastAppliedRot.dot(totalRot) < 0) {
-                            totalRot.negate();
+                        float dot = b.lastAppliedRot.x * totalRot.x + b.lastAppliedRot.y * totalRot.y + b.lastAppliedRot.z * totalRot.z + b.lastAppliedRot.w * totalRot.w;
+                        if (dot < 0) {
+                            totalRot.x = -totalRot.x;
+                            totalRot.y = -totalRot.y;
+                            totalRot.z = -totalRot.z;
+                            totalRot.w = -totalRot.w;
                         }
                         b.lastAppliedRot.set(totalRot);
 
