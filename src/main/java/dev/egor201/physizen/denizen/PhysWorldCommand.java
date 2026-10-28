@@ -59,6 +59,9 @@ public class PhysWorldCommand extends AbstractCommand {
         try {
             switch (act) {
                 case "create": {
+                    if (PhysEngine.get().world(id) != null) {
+                        break;
+                    }
                     int rate = scriptEntry.hasObject("rate") ? (int) Util.num(scriptEntry.getObjectTag("rate"), 60) : 60;
                     PhysWorld w = PhysEngine.get().createWorld(id, rate);
                     if (scriptEntry.hasObject("gravity")) {
