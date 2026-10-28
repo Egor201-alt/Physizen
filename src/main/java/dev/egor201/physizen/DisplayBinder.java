@@ -23,8 +23,10 @@ public class DisplayBinder {
         public Vector3f offset = new Vector3f();
         public Vector3f scale = new Vector3f(1, 1, 1);
         public Quaternionf rotationOffset = new Quaternionf();
-        public int interpolationDuration = 1;
-        public int teleportDuration = 1;
+        public Quaternionf lastAppliedRot = new Quaternionf();
+        public int interpolationDuration = 3;
+        public int teleportDuration = 3;
+        public int interpolationStart = 0;
         public boolean removeWithBody = true;
 
         public Binding(Entity entity) {
@@ -153,19 +155,22 @@ public class DisplayBinder {
 
                     if (b.entity instanceof Display) {
                         Display d = (Display) b.entity;
-                        d.setInterpolationDuration(b.interpolationDuration);
-                        d.setTeleportDuration(b.teleportDuration);
 
                         Quaternionf totalRot = new Quaternionf(bodyRot).mul(b.rotationOffset);
-                        Vector3f translation = new Vector3f();
 
+                        if (b.lastAppliedRot.dot(totalRot) < 0) {
+                            totalRot.negate();
+                        }
+                        b.lastAppliedRot.set(totalRot);
+
+                        Vector3f translation = new Vector3f();
                         if (d instanceof BlockDisplay) {
-                            Vector3f qOffset = bodyRot.transform(new Vector3f(b.offset));
                             Vector3f halfScale = new Vector3f(b.scale).mul(0.5f);
-                            Vector3f lHalfScale = totalRot.transform(halfScale);
-                            translation.set(qOffset).sub(lHalfScale);
+                            Vector3f rotatedHalf = totalRot.transform(halfScale, new Vector3f());
+                            Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset), new Vector3f());
+                            translation.set(worldOffset).sub(rotatedHalf);
                         } else {
-                            translation.set(bodyRot.transform(new Vector3f(b.offset)));
+                            translation.set(bodyRot.transform(new Vector3f(b.offset), new Vector3f()));
                         }
 
                         Transformation transform = new Transformation(
@@ -174,10 +179,14 @@ public class DisplayBinder {
                                 b.scale,
                                 new Quaternionf()
                         );
+
+                        d.setInterpolationDelay(b.interpolationStart);
+                        d.setInterpolationDuration(b.interpolationDuration);
+                        d.setTeleportDuration(b.teleportDuration);
                         d.setTransformation(transform);
                         d.teleport(bodyLoc);
                     } else {
-                        Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset));
+                        Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset), new Vector3f());
                         Location target = bodyLoc.clone().add(worldOffset.x, worldOffset.y, worldOffset.z);
                         b.entity.teleport(target);
                     }
