@@ -106,6 +106,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
         displayBinder = new DisplayBinder();
         terrainManager = new TerrainManager();
+        getServer().getPluginManager().registerEvents(terrainManager, this);
         Util.init(this);
 
         ObjectFetcher.registerWithObjectFetcher(PhysWorldTag.class, PhysWorldTag.tagProcessor);
