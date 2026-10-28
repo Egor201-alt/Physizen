@@ -78,7 +78,7 @@ public class PhysBodyCommand extends AbstractCommand {
                     BodyDef def = new BodyDef();
                     def.name = name;
                     ObjectTag shapeObj = scriptEntry.getObjectTag("shape");
-                    def.shape = Util.shape((ObjectTag) shapeObj, scriptEntry.context)
+                    def.shape = Util.shape((ObjectTag) shapeObj, scriptEntry.context);
                     if (scriptEntry.hasObject("at") || scriptEntry.hasObject("position")) {
                         def.position = Util.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context);
                     }
