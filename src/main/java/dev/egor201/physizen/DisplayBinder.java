@@ -37,8 +37,8 @@ public class DisplayBinder {
         final String bodyName;
 
         BodyKey(String worldId, String bodyName) {
-            this.worldId = worldId;
-            this.bodyName = bodyName;
+            this.worldId = worldId != null ? worldId : "default";
+            this.bodyName = bodyName != null ? bodyName : "";
         }
 
         @Override
