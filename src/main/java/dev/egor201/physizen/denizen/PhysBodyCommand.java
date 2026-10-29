@@ -307,7 +307,7 @@ public class PhysBodyCommand extends AbstractCommand {
                     String fileName = scriptEntry.getElement("file").asString();
                     MapTag result;
                     if (scriptEntry.hasObject("bodies")) {
-                        ListTag bList = scriptEntry.getObjectTag("bodies").asType(ListTag.class, scriptEntry.context);
+                        ListTag bList = ((ObjectTag) scriptEntry.getObjectTag("bodies")).asType(ListTag.class, scriptEntry.context);
                         List<String> names = new ArrayList<>();
                         for (ObjectTag obj : bList.objectForms) {
                             names.add(obj.toString());
