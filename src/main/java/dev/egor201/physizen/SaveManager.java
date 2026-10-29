@@ -420,8 +420,8 @@ public final class SaveManager {
         if (tag instanceof MapTag) {
             Map<String, Object> map = new LinkedHashMap<>();
             MapTag mt = (MapTag) tag;
-            for (com.denizenscript.denizencore.utilities.text.StringHolder key : mt.keys()) {
-                map.put(key.str, unpack(mt.getObject(key)));
+            for (String key : mt.keys()) {
+                map.put(key, unpack(mt.getObject(key)));
             }
             return map;
         }
