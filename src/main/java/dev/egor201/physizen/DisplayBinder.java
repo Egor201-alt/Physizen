@@ -63,7 +63,10 @@ public class DisplayBinder {
 
     public void bind(String worldId, String bodyName, Binding binding) {
         BodyKey key = new BodyKey(worldId, bodyName);
-        bindings.computeIfAbsent(key, k -> Collections.synchronizedList(new ArrayList<>())).add(binding);
+        List<Binding> list = bindings.computeIfAbsent(key, k -> Collections.synchronizedList(new ArrayList<>()));
+        list.removeIf(existing -> existing.entity.getUniqueId().equals(binding.entity.getUniqueId()));
+        list.add(binding);
+        lastSteps.remove(key);
     }
 
     public void unbind(String worldId, String bodyName, UUID entityUuid) {
@@ -89,6 +92,37 @@ public class DisplayBinder {
                 }
             }
         }
+    }
+
+    public void rescale(String worldId, String bodyName, double factor) {
+        BodyKey key = new BodyKey(worldId, bodyName);
+        List<Binding> list = bindings.get(key);
+        if (list == null) {
+            return;
+        }
+        synchronized (list) {
+            for (Binding b : list) {
+                b.scale.mul((float) factor);
+                b.offset.mul((float) factor);
+                b.lastSentRot.set(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
+            }
+        }
+        lastSteps.remove(key);
+    }
+
+    public void setScale(String worldId, String bodyName, Vector3f scale) {
+        BodyKey key = new BodyKey(worldId, bodyName);
+        List<Binding> list = bindings.get(key);
+        if (list == null) {
+            return;
+        }
+        synchronized (list) {
+            for (Binding b : list) {
+                b.scale.set(scale);
+                b.lastSentRot.set(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
+            }
+        }
+        lastSteps.remove(key);
     }
 
     public List<Entity> getBoundDisplays(String worldId, String bodyName) {
@@ -184,11 +218,9 @@ public class DisplayBinder {
                                 Vector3f rotatedHalf = totalRot.transform(halfScale, new Vector3f());
                                 Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset), new Vector3f());
                                 translation.set(worldOffset).sub(rotatedHalf);
-                                } else {
-                                    Vector3f scaledOffset = new Vector3f(b.offset).mul(b.scale);
-                                    Vector3f rotatedOffset = totalRot.transform(scaledOffset, new Vector3f());
-                                    translation.set(rotatedOffset);
-                                }
+                            } else {
+                                translation.set(bodyRot.transform(new Vector3f(b.offset), new Vector3f()));
+                            }
 
                             Transformation transform = new Transformation(
                                     translation,

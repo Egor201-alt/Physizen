@@ -2,6 +2,7 @@ package dev.egor201.physizen;
 
 import com.denizenscript.denizencore.DenizenCore;
 import com.denizenscript.denizencore.objects.ObjectFetcher;
+import dev.egor201.physizen.bukkit.HitboxManager;
 import dev.egor201.physizen.bukkit.TerrainManager;
 import dev.egor201.physizen.core.EngineConfig;
 import dev.egor201.physizen.core.PhysBody;
@@ -13,6 +14,7 @@ import dev.egor201.physizen.denizen.PhysBodyTag;
 import dev.egor201.physizen.denizen.PhysConstraintCommand;
 import dev.egor201.physizen.denizen.PhysFieldCommand;
 import dev.egor201.physizen.denizen.PhysForceCommand;
+import dev.egor201.physizen.denizen.PhysHitboxCommand;
 import dev.egor201.physizen.denizen.PhysScriptEvents;
 import dev.egor201.physizen.denizen.PhysWorldCommand;
 import dev.egor201.physizen.denizen.PhysWorldTag;
@@ -33,6 +35,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
     private static Physizen instance;
     private DisplayBinder displayBinder;
     private TerrainManager terrainManager;
+    private HitboxManager hitboxManager;
     private final Map<String, World> worldAttachments = new ConcurrentHashMap<>();
     private long currentTick = 0;
 
@@ -48,16 +51,17 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         return terrainManager;
     }
 
+    public HitboxManager getHitboxManager() {
+        return hitboxManager;
+    }
+
     public void attachWorld(String worldId, World world) {
         worldAttachments.put(worldId, world);
     }
 
     public World getWorld(String worldId) {
         World w = worldAttachments.get(worldId);
-        if (w != null) return w;
-        w = Bukkit.getWorld(worldId);
-        if (w != null) return w;
-        return Bukkit.getWorlds().isEmpty() ? null : Bukkit.getWorlds().get(0);
+        return w != null ? w : Bukkit.getWorld(worldId);
     }
 
     private boolean checkDenizenM() {
@@ -85,7 +89,8 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         saveDefaultConfig();
         EngineConfig cfg = new EngineConfig();
         cfg.tickRate = getConfig().getInt("tick_rate", 60);
-        cfg.workerThreads = getConfig().getInt("worker_threads", Math.max(1, Runtime.getRuntime().availableProcessors() / 2));
+        int configuredThreads = getConfig().getInt("worker_threads", 0);
+        cfg.workerThreads = configuredThreads > 0 ? configuredThreads : Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
         cfg.tempAllocatorMegabytes = getConfig().getInt("temp_allocator_megabytes", 16);
         cfg.maxBodies = getConfig().getInt("max_bodies", 65536);
         cfg.maxBodyPairs = getConfig().getInt("max_body_pairs", 65536);
@@ -110,6 +115,8 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         displayBinder = new DisplayBinder();
         terrainManager = new TerrainManager();
         getServer().getPluginManager().registerEvents(terrainManager, this);
+        hitboxManager = new HitboxManager();
+        getServer().getPluginManager().registerEvents(hitboxManager, this);
         Util.init(this);
 
         ObjectFetcher.registerWithObjectFetcher(PhysWorldTag.class, PhysWorldTag.tagProcessor);
@@ -136,6 +143,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         DenizenCore.commandRegistry.registerCommand(PhysForceCommand.class);
         DenizenCore.commandRegistry.registerCommand(PhysConstraintCommand.class);
         DenizenCore.commandRegistry.registerCommand(PhysFieldCommand.class);
+        DenizenCore.commandRegistry.registerCommand(PhysHitboxCommand.class);
 
         PhysScriptEvents.registerAll();
 
@@ -145,6 +153,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
             currentTick++;
+            hitboxManager.tick();
             displayBinder.tick();
             terrainManager.tick(currentTick);
 
@@ -164,6 +173,9 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
     @Override
     public void onDisable() {
+        if (hitboxManager != null) {
+            hitboxManager.clear();
+        }
         if (PhysEngine.get() != null) {
             PhysEngine.get().shutdown();
         }

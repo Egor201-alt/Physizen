@@ -16,6 +16,7 @@ import dev.egor201.physizen.core.MotionKind;
 import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.PhysWorld;
+import dev.egor201.physizen.core.ShapeSpec;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
@@ -25,7 +26,7 @@ import java.util.List;
 // @Name physbody
 // @Syntax physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate] (world:<world>) (name:<name>) ...
 // @Required 1
-// @Maximum 12
+// @Maximum 24
 // @Short Controls Physizen physical bodies.
 // @Group Physizen
 // -->
@@ -34,7 +35,7 @@ public class PhysBodyCommand extends AbstractCommand {
     public PhysBodyCommand() {
         setName("physbody");
         setSyntax("physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate] (world:<world>) (name:<name>) ...");
-        setRequiredArguments(1, 12);
+        setRequiredArguments(1, 24);
         isProcedural = false;
     }
 
@@ -67,6 +68,11 @@ public class PhysBodyCommand extends AbstractCommand {
         String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : "default";
         String name = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
 
+        if (name == null) {
+            Debug.echoError(scriptEntry, "physbody needs name:<id>.");
+            return;
+        }
+
         try {
             PhysWorld w = Util.world(worldId);
 
@@ -84,9 +90,7 @@ public class PhysBodyCommand extends AbstractCommand {
                         def.position = Util.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context);
                     }
                     if (scriptEntry.hasObject("rotation")) {
-                        MapTag rotMap = new MapTag();
-                        rotMap.putObject("rotation", scriptEntry.getObjectTag("rotation"));
-                        def.rotation = Util.quat(rotMap, scriptEntry.context);
+                        def.rotation = Util.rotation(scriptEntry.getObjectTag("rotation"), scriptEntry.context);
                     }
                     else if (scriptEntry.hasObject("euler")) {
                         def.rotation = Util.euler(Util.vec(scriptEntry.getObjectTag("euler"), scriptEntry.context));
@@ -107,6 +111,8 @@ public class PhysBodyCommand extends AbstractCommand {
                     def.notify = Util.bool(scriptEntry.getObjectTag("notify"), true);
                     def.removeOnFallOut = Util.bool(scriptEntry.getObjectTag("remove_on_fall"), true);
                     def.tag = Util.str(scriptEntry.getObjectTag("tag"), "");
+                    def.maxLinearVelocity = Util.num(scriptEntry.getObjectTag("max_velocity"), 500);
+                    def.maxAngularVelocity = Util.num(scriptEntry.getObjectTag("max_angular_velocity"), 47.1238898);
 
                     if (scriptEntry.hasObject("velocity")) {
                         def.linearVelocity = Util.vec(scriptEntry.getObjectTag("velocity"), scriptEntry.context);
@@ -128,7 +134,7 @@ public class PhysBodyCommand extends AbstractCommand {
                     PhysBody b = w.body(name);
                     if (b == null) return;
                     double[] pos = Util.vec(scriptEntry.getObjectTag("to"), scriptEntry.context);
-                    double[] rot = scriptEntry.hasObject("rotation") ? Util.vec(scriptEntry.getObjectTag("rotation"), scriptEntry.context) : null;
+                    double[] rot = readRotation(scriptEntry);
                     b.teleport(pos, rot);
                     break;
                 }
@@ -136,7 +142,7 @@ public class PhysBodyCommand extends AbstractCommand {
                     PhysBody b = w.body(name);
                     if (b == null) return;
                     double[] pos = Util.vec(scriptEntry.getObjectTag("to"), scriptEntry.context);
-                    double[] rot = scriptEntry.hasObject("rotation") ? Util.vec(scriptEntry.getObjectTag("rotation"), scriptEntry.context) : null;
+                    double[] rot = readRotation(scriptEntry);
                     double seconds = Util.num(scriptEntry.getObjectTag("seconds"), 1.0 / 20.0);
                     b.moveKinematic(pos, rot, seconds);
                     break;
@@ -154,12 +160,103 @@ public class PhysBodyCommand extends AbstractCommand {
                 case "set": {
                     PhysBody b = w.body(name);
                     if (b == null) return;
+                    if (b.def.internal) {
+                        throw new PhysException("Terrain bodies cannot be modified.");
+                    }
+                    MotionKind newType = null;
+                    if (scriptEntry.hasObject("type")) {
+                        try {
+                            newType = MotionKind.valueOf(scriptEntry.getElement("type").asString().toUpperCase());
+                        }
+                        catch (IllegalArgumentException e) {
+                            throw new PhysException("Unknown body type '" + scriptEntry.getElement("type").asString() + "', expected static, kinematic or dynamic.");
+                        }
+                    }
+                    ShapeSpec newShape = null;
+                    if (scriptEntry.hasObject("shape")) {
+                        newShape = Util.shape(scriptEntry.getObjectTag("shape"), scriptEntry.context);
+                    }
+                    MotionKind targetType = newType != null ? newType : b.def.type;
+                    ShapeSpec targetShape = newShape != null ? newShape : b.def.shape;
+                    if (targetType == MotionKind.DYNAMIC && targetShape.requiresNonDynamic()) {
+                        throw new PhysException("Mesh shapes can only be used by static or kinematic bodies.");
+                    }
+                    double scaleFactor = 1.0;
+                    boolean hasScale = scriptEntry.hasObject("scale");
+                    if (hasScale) {
+                        scaleFactor = Util.num(scriptEntry.getObjectTag("scale"), 1.0);
+                        if (!(scaleFactor > 0)) {
+                            throw new PhysException("Scale must be positive.");
+                        }
+                    }
+                    int newGroup = -1;
+                    if (scriptEntry.hasObject("group")) {
+                        newGroup = (int) Util.num(scriptEntry.getObjectTag("group"), 0);
+                        if (newGroup < 0 || newGroup >= PhysWorld.GROUPS) {
+                            throw new PhysException("Group must be between 0 and " + (PhysWorld.GROUPS - 1) + ".");
+                        }
+                    }
+                    if (newType != null && newType != MotionKind.DYNAMIC) {
+                        b.setType(newType);
+                    }
+                    if (newShape != null) {
+                        b.reshape(newShape);
+                    }
+                    if (hasScale) {
+                        b.scale(scaleFactor);
+                        if (Util.bool(scriptEntry.getObjectTag("scale_displays"), true)) {
+                            Physizen.getInstance().getDisplayBinder().rescale(worldId, name, scaleFactor);
+                        }
+                    }
+                    if (newType == MotionKind.DYNAMIC) {
+                        b.setType(newType);
+                    }
+                    if (scriptEntry.hasObject("mass")) {
+                        b.setMass(Util.num(scriptEntry.getObjectTag("mass"), 0));
+                    }
+                    if (newGroup >= 0) {
+                        b.setGroup(newGroup);
+                    }
+                    if (scriptEntry.hasObject("sensor")) {
+                        b.setSensor(Util.bool(scriptEntry.getObjectTag("sensor"), false));
+                    }
+                    if (scriptEntry.hasObject("continuous")) {
+                        b.setContinuous(Util.bool(scriptEntry.getObjectTag("continuous"), false));
+                    }
+                    if (scriptEntry.hasObject("allow_sleeping")) {
+                        b.setAllowSleeping(Util.bool(scriptEntry.getObjectTag("allow_sleeping"), true));
+                    }
+                    if (scriptEntry.hasObject("max_velocity")) {
+                        b.setMaxVelocities(Util.num(scriptEntry.getObjectTag("max_velocity"), 500), null);
+                    }
+                    if (scriptEntry.hasObject("max_angular_velocity")) {
+                        b.setMaxVelocities(null, Util.num(scriptEntry.getObjectTag("max_angular_velocity"), 47.1238898));
+                    }
+                    if (scriptEntry.hasObject("notify")) {
+                        b.setNotify(Util.bool(scriptEntry.getObjectTag("notify"), true));
+                    }
+                    if (scriptEntry.hasObject("remove_on_fall")) {
+                        b.setRemoveOnFallOut(Util.bool(scriptEntry.getObjectTag("remove_on_fall"), true));
+                    }
+                    if (scriptEntry.hasObject("display_scale")) {
+                        double[] ds = Util.vec(scriptEntry.getObjectTag("display_scale"), scriptEntry.context);
+                        Physizen.getInstance().getDisplayBinder().setScale(worldId, name, new Vector3f((float) ds[0], (float) ds[1], (float) ds[2]));
+                    }
                     if (scriptEntry.hasObject("friction")) b.setFriction(Util.num(scriptEntry.getObjectTag("friction"), 0.5));
                     if (scriptEntry.hasObject("restitution")) b.setRestitution(Util.num(scriptEntry.getObjectTag("restitution"), 0));
                     if (scriptEntry.hasObject("gravity")) b.setGravityFactor(Util.num(scriptEntry.getObjectTag("gravity"), 1));
                     if (scriptEntry.hasObject("damping")) {
-                        double[] d = Util.vec(scriptEntry.getObjectTag("damping"), scriptEntry.context);
+                        double[] d = Util.pair(scriptEntry.getObjectTag("damping"));
                         b.setDamping(d[0], d[1]);
+                    }
+                    if (scriptEntry.hasObject("linear_damping")) {
+                        b.setDamping(Util.num(scriptEntry.getObjectTag("linear_damping"), 0.05), null);
+                    }
+                    if (scriptEntry.hasObject("angular_damping")) {
+                        b.setDamping(null, Util.num(scriptEntry.getObjectTag("angular_damping"), 0.05));
+                    }
+                    if (scriptEntry.hasObject("tag")) {
+                        b.tag = Util.str(scriptEntry.getObjectTag("tag"), "");
                     }
                     break;
                 }
@@ -208,5 +305,15 @@ public class PhysBodyCommand extends AbstractCommand {
         catch (PhysException e) {
             Debug.echoError(scriptEntry, e.getMessage());
         }
+    }
+
+    private static double[] readRotation(ScriptEntry scriptEntry) {
+        if (scriptEntry.hasObject("rotation")) {
+            return Util.rotation(scriptEntry.getObjectTag("rotation"), scriptEntry.context);
+        }
+        if (scriptEntry.hasObject("euler")) {
+            return Util.euler(Util.vec(scriptEntry.getObjectTag("euler"), scriptEntry.context));
+        }
+        return null;
     }
 }

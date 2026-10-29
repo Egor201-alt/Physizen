@@ -14,7 +14,7 @@ import dev.egor201.physizen.core.PhysWorld;
 // @Name physfield
 // @Syntax physfield [create/remove] (world:<world>) name:<name> (type:<type>) (center:<loc>) (radius:<r>) (strength:<s>) ...
 // @Required 2
-// @Maximum 12
+// @Maximum 16
 // @Short Creates or removes physical force fields (wind, vortex, buoyancy, radial gravity).
 // @Group Physizen
 // -->
@@ -23,7 +23,7 @@ public class PhysFieldCommand extends AbstractCommand {
     public PhysFieldCommand() {
         setName("physfield");
         setSyntax("physfield [create/remove] (world:<world>) name:<name> (type:<type>) (center:<loc>) (radius:<r>) (strength:<s>) ...");
-        setRequiredArguments(2, 12);
+        setRequiredArguments(2, 16);
         isProcedural = false;
     }
 

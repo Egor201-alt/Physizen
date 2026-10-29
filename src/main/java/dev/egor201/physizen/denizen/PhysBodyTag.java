@@ -2,6 +2,7 @@ package dev.egor201.physizen.denizen;
 
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.LocationTag;
+import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.objects.Fetchable;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -19,6 +20,7 @@ import org.bukkit.World;
 import org.bukkit.entity.Entity;
 
 import java.util.List;
+import java.util.UUID;
 
 // <--[ObjectType]
 // @name PhysBodyTag
@@ -300,6 +302,19 @@ public class PhysBodyTag implements ObjectTag {
                 result.addObject(new EntityTag(ent));
             }
             return result;
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.player>
+        // @returns PlayerTag
+        // @description
+        // Returns the player this body is attached to as a hitbox (see physhitbox), or null if it is not a player hitbox.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(PlayerTag.class, "player", (attribute, object) -> {
+            UUID owner = Physizen.getInstance().getHitboxManager().ownerOf(object.worldId, object.name);
+            if (owner == null) return null;
+            return new PlayerTag(owner);
         });
     }
 

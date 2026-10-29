@@ -1,5 +1,5 @@
 name: Physizen
-version: '0.0.0'
+version: '${version}'
 main: dev.egor201.physizen.Physizen
 api-version: '1.21'
 author: egor201

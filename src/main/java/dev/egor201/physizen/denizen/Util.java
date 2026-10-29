@@ -96,6 +96,57 @@ public final class Util {
         return tag == null ? fallback : tag.toString();
     }
 
+    public static double[] pair(ObjectTag tag) {
+        if (tag == null) {
+            throw new PhysException("Missing value.");
+        }
+        String text = tag.toString().trim();
+        if (text.startsWith("l@") || text.startsWith("v@")) {
+            text = text.substring(2);
+        }
+        String[] parts = text.split(",");
+        if (parts.length < 2) {
+            throw new PhysException("Invalid pair '" + tag + "', expected a,b.");
+        }
+        try {
+            return new double[]{Double.parseDouble(parts[0].trim()), Double.parseDouble(parts[1].trim())};
+        }
+        catch (NumberFormatException e) {
+            throw new PhysException("Invalid pair '" + tag + "'.");
+        }
+    }
+
+    public static double[] rotation(ObjectTag tag, TagContext context) {
+        if (tag == null) {
+            throw new PhysException("Missing rotation value.");
+        }
+        if (tag instanceof QuaternionTag) {
+            QuaternionTag qt = (QuaternionTag) tag;
+            return normalize(new double[]{qt.x, qt.y, qt.z, qt.w});
+        }
+        String text = tag.toString().trim();
+        if (text.startsWith("quaternion@")) {
+            QuaternionTag qt = tag.asType(QuaternionTag.class, context);
+            if (qt != null) {
+                return normalize(new double[]{qt.x, qt.y, qt.z, qt.w});
+            }
+        }
+        String plain = text.startsWith("l@") || text.startsWith("v@") ? text.substring(2) : text;
+        String[] parts = plain.split(",");
+        if (parts.length == 4) {
+            try {
+                return normalize(new double[]{
+                        Double.parseDouble(parts[0].trim()),
+                        Double.parseDouble(parts[1].trim()),
+                        Double.parseDouble(parts[2].trim()),
+                        Double.parseDouble(parts[3].trim())});
+            }
+            catch (NumberFormatException ignored) {
+            }
+        }
+        return euler(vec(tag, context));
+    }
+
     public static double[] quat(MapTag named, TagContext context) {
         ObjectTag q = named.getObject("rotation");
         if (q != null) {

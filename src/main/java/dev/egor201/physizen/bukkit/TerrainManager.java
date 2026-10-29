@@ -5,6 +5,7 @@ import dev.egor201.physizen.core.BodyDef;
 import dev.egor201.physizen.core.MotionKind;
 import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysEngine;
+import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.PhysWorld;
 import dev.egor201.physizen.core.ShapeSpec;
 import dev.egor201.physizen.core.Snapshot;
@@ -13,12 +14,19 @@ import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.World;
 import org.bukkit.block.Block;
+import org.bukkit.block.BlockFace;
 import org.bukkit.block.data.BlockData;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.block.BlockBreakEvent;
+import org.bukkit.event.block.BlockBurnEvent;
 import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.block.BlockFadeEvent;
+import org.bukkit.event.block.BlockFormEvent;
+import org.bukkit.event.block.BlockPistonExtendEvent;
+import org.bukkit.event.block.BlockPistonRetractEvent;
+import org.bukkit.event.block.LeavesDecayEvent;
 import org.bukkit.event.block.BlockPlaceEvent;
 import org.bukkit.event.entity.EntityChangeBlockEvent;
 import org.bukkit.event.entity.EntityExplodeEvent;
@@ -142,6 +150,86 @@ public class TerrainManager implements Listener {
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntityChangeBlock(EntityChangeBlockEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
+
+    public void invalidateArea(String physWorldId, double[] min, double[] max) {
+        PhysEngine engine = PhysEngine.get();
+        if (engine == null) return;
+        PhysWorld pw = engine.world(physWorldId);
+        if (pw == null) return;
+
+        int minTx = ((int) Math.floor(min[0]) - 1) >> TILE_SHIFT;
+        int maxTx = ((int) Math.floor(max[0]) + 1) >> TILE_SHIFT;
+        int minTy = ((int) Math.floor(min[1]) - 1) >> TILE_SHIFT;
+        int maxTy = ((int) Math.floor(max[1]) + 1) >> TILE_SHIFT;
+        int minTz = ((int) Math.floor(min[2]) - 1) >> TILE_SHIFT;
+        int maxTz = ((int) Math.floor(max[2]) + 1) >> TILE_SHIFT;
+
+        long count = (long) (maxTx - minTx + 1) * (maxTy - minTy + 1) * (maxTz - minTz + 1);
+        if (count > 4096) {
+            throw new PhysException("Refresh area is too large.");
+        }
+
+        for (int x = minTx; x <= maxTx; x++) {
+            for (int y = minTy; y <= maxTy; y++) {
+                for (int z = minTz; z <= maxTz; z++) {
+                    TileKey key = new TileKey(physWorldId, x, y, z);
+                    TileData tile = activeTiles.get(key);
+                    if (tile != null) {
+                        tile.dirty = true;
+                        dirtyTiles.add(key);
+                    }
+                }
+            }
+        }
+
+        double[] wmin = {min[0] - 1, min[1] - 1, min[2] - 1};
+        double[] wmax = {max[0] + 1, max[1] + 3, max[2] + 1};
+        for (PhysBody pb : pw.inBox(wmin, wmax)) {
+            if (pb.def.type != MotionKind.STATIC && !pb.def.internal) {
+                pb.activate();
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPistonExtend(BlockPistonExtendEvent event) {
+        BlockFace dir = event.getDirection();
+        invalidateBlock(event.getBlock().getRelative(dir).getLocation());
+        for (Block b : event.getBlocks()) {
+            invalidateBlock(b.getLocation());
+            invalidateBlock(b.getRelative(dir).getLocation());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPistonRetract(BlockPistonRetractEvent event) {
+        BlockFace dir = event.getDirection();
+        invalidateBlock(event.getBlock().getRelative(dir).getLocation());
+        for (Block b : event.getBlocks()) {
+            invalidateBlock(b.getLocation());
+            invalidateBlock(b.getRelative(dir.getOppositeFace()).getLocation());
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockBurn(BlockBurnEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onLeavesDecay(LeavesDecayEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockFade(BlockFadeEvent event) {
+        invalidateBlock(event.getBlock().getLocation());
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onBlockForm(BlockFormEvent event) {
         invalidateBlock(event.getBlock().getLocation());
     }
 
