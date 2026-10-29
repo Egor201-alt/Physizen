@@ -411,23 +411,25 @@ public final class PhysWorld {
                     s.setMaxFrictionTorque((float) def.maxFriction);
                     made = s.create(body1, body2);
 
-                    HingeConstraint hinge = made instanceof HingeConstraint ? (HingeConstraint) made : new HingeConstraint(made.va());
-                    if (def.motorMaxTorque > 0) {
-                        hinge.getMotorSettings().setTorqueLimit((float) def.motorMaxTorque);
-                    }
-                    if (def.motorSpringFrequency > 0) {
-                        SpringSettings ss = hinge.getMotorSettings().getSpringSettings();
-                        ss.setMode(ESpringMode.FrequencyAndDamping);
-                        ss.setFrequency((float) def.motorSpringFrequency);
-                        ss.setDamping((float) def.motorSpringDamping);
-                    }
-                    if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
-                        hinge.setMotorState(EMotorState.Velocity);
-                        hinge.setTargetAngularVelocity((float) def.motorTarget);
-                    }
-                    else if (def.motorState == ConstraintDef.MotorState.POSITION) {
-                        hinge.setMotorState(EMotorState.Position);
-                        hinge.setTargetAngle((float) def.motorTarget);
+                    if (made instanceof HingeConstraint) {
+                        HingeConstraint hinge = (HingeConstraint) made;
+                        if (def.motorMaxTorque > 0) {
+                            hinge.getMotorSettings().setTorqueLimit((float) def.motorMaxTorque);
+                        }
+                        if (def.motorSpringFrequency > 0) {
+                            SpringSettings ss = hinge.getMotorSettings().getSpringSettings();
+                            ss.setMode(ESpringMode.FrequencyAndDamping);
+                            ss.setFrequency((float) def.motorSpringFrequency);
+                            ss.setDamping((float) def.motorSpringDamping);
+                        }
+                        if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
+                            hinge.setMotorState(EMotorState.Velocity);
+                            hinge.setTargetAngularVelocity((float) def.motorTarget);
+                        }
+                        else if (def.motorState == ConstraintDef.MotorState.POSITION) {
+                            hinge.setMotorState(EMotorState.Position);
+                            hinge.setTargetAngle((float) def.motorTarget);
+                        }
                     }
                     break;
                 }
@@ -443,23 +445,25 @@ public final class PhysWorld {
                     s.setMaxFrictionForce((float) def.maxFriction);
                     made = s.create(body1, body2);
 
-                    SliderConstraint slider = made instanceof SliderConstraint ? (SliderConstraint) made : new SliderConstraint(made.va());
-                    if (def.motorMaxForce > 0) {
-                        slider.getMotorSettings().setForceLimit((float) def.motorMaxForce);
-                    }
-                    if (def.motorSpringFrequency > 0) {
-                        SpringSettings ss = slider.getMotorSettings().getSpringSettings();
-                        ss.setMode(ESpringMode.FrequencyAndDamping);
-                        ss.setFrequency((float) def.motorSpringFrequency);
-                        ss.setDamping((float) def.motorSpringDamping);
-                    }
-                    if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
-                        slider.setMotorState(EMotorState.Velocity);
-                        slider.setTargetVelocity((float) def.motorTarget);
-                    }
-                    else if (def.motorState == ConstraintDef.MotorState.POSITION) {
-                        slider.setMotorState(EMotorState.Position);
-                        slider.setTargetPosition((float) def.motorTarget);
+                    if (made instanceof SliderConstraint) {
+                        SliderConstraint slider = (SliderConstraint) made;
+                        if (def.motorMaxForce > 0) {
+                            slider.getMotorSettings().setForceLimit((float) def.motorMaxForce);
+                        }
+                        if (def.motorSpringFrequency > 0) {
+                            SpringSettings ss = slider.getMotorSettings().getSpringSettings();
+                            ss.setMode(ESpringMode.FrequencyAndDamping);
+                            ss.setFrequency((float) def.motorSpringFrequency);
+                            ss.setDamping((float) def.motorSpringDamping);
+                        }
+                        if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
+                            slider.setMotorState(EMotorState.Velocity);
+                            slider.setTargetVelocity((float) def.motorTarget);
+                        }
+                        else if (def.motorState == ConstraintDef.MotorState.POSITION) {
+                            slider.setMotorState(EMotorState.Position);
+                            slider.setTargetPosition((float) def.motorTarget);
+                        }
                     }
                     break;
                 }
@@ -519,13 +523,9 @@ public final class PhysWorld {
             if (c == null || def == null) {
                 return;
             }
-            if (!(c instanceof TwoBodyConstraint)) {
-                return;
-            }
-            TwoBodyConstraint tbc = (TwoBodyConstraint) c;
 
-            if (def.kind == ConstraintDef.Kind.HINGE) {
-                HingeConstraint hinge = tbc instanceof HingeConstraint ? (HingeConstraint) tbc : new HingeConstraint(tbc.va());
+            if (def.kind == ConstraintDef.Kind.HINGE && c instanceof HingeConstraint) {
+                HingeConstraint hinge = (HingeConstraint) c;
                 MotorSettings ms = hinge.getMotorSettings();
                 if (maxForceOrTorque != null && maxForceOrTorque > 0) {
                     ms.setTorqueLimit(maxForceOrTorque.floatValue());
@@ -560,8 +560,8 @@ public final class PhysWorld {
                 }
                 wakeConstraintBodies(name);
             }
-            else if (def.kind == ConstraintDef.Kind.SLIDER) {
-                SliderConstraint slider = tbc instanceof SliderConstraint ? (SliderConstraint) tbc : new SliderConstraint(tbc.va());
+            else if (def.kind == ConstraintDef.Kind.SLIDER && c instanceof SliderConstraint) {
+                SliderConstraint slider = (SliderConstraint) c;
                 MotorSettings ms = slider.getMotorSettings();
                 if (maxForceOrTorque != null && maxForceOrTorque > 0) {
                     ms.setForceLimit(maxForceOrTorque.floatValue());
@@ -618,9 +618,8 @@ public final class PhysWorld {
         if (c == null) return null;
         queryLock.readLock().lock();
         try {
-            if (c instanceof TwoBodyConstraint) {
-                TwoBodyConstraint tbc = (TwoBodyConstraint) c;
-                HingeConstraint hinge = tbc instanceof HingeConstraint ? (HingeConstraint) tbc : new HingeConstraint(tbc.va());
+            if (c instanceof HingeConstraint) {
+                HingeConstraint hinge = (HingeConstraint) c;
                 return (double) hinge.getCurrentAngle();
             }
             return null;
@@ -638,9 +637,8 @@ public final class PhysWorld {
         if (c == null) return null;
         queryLock.readLock().lock();
         try {
-            if (c instanceof TwoBodyConstraint) {
-                TwoBodyConstraint tbc = (TwoBodyConstraint) c;
-                SliderConstraint slider = tbc instanceof SliderConstraint ? (SliderConstraint) tbc : new SliderConstraint(tbc.va());
+            if (c instanceof SliderConstraint) {
+                SliderConstraint slider = (SliderConstraint) c;
                 return (double) slider.getCurrentPosition();
             }
             return null;
