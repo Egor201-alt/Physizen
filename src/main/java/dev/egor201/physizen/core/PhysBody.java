@@ -153,6 +153,7 @@ public final class PhysBody {
     public void setFriction(double value) {
         world.post(() -> {
             if (ready) {
+                def.friction = value;
                 world.bodyInterface.setFriction(joltId, (float) value);
             }
         });
@@ -161,6 +162,7 @@ public final class PhysBody {
     public void setRestitution(double value) {
         world.post(() -> {
             if (ready) {
+                def.restitution = value;
                 world.bodyInterface.setRestitution(joltId, (float) value);
             }
         });
@@ -169,6 +171,7 @@ public final class PhysBody {
     public void setGravityFactor(double value) {
         world.post(() -> {
             if (ready) {
+                def.gravityFactor = value;
                 world.bodyInterface.setGravityFactor(joltId, (float) value);
             }
         });
@@ -178,9 +181,11 @@ public final class PhysBody {
         world.post(() -> {
             if (ready && body != null && body.getMotionProperties() != null) {
                 if (linear != null) {
+                    def.linearDamping = linear;
                     body.getMotionProperties().setLinearDamping(linear.floatValue());
                 }
                 if (angular != null) {
+                    def.angularDamping = angular;
                     body.getMotionProperties().setAngularDamping(angular.floatValue());
                 }
             }

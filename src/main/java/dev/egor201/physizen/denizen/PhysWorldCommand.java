@@ -190,7 +190,9 @@ public class PhysWorldCommand extends AbstractCommand {
                     PhysWorld pw = Util.world(id);
                     List<String> bodyNames = new ArrayList<>();
                     for (PhysBody pb : pw.bodies()) {
-                        bodyNames.add(pb.name);
+                        if (Physizen.getInstance().getHitboxManager().ownerOf(pw.id, pb.name) == null) {
+                            bodyNames.add(pb.name);
+                        }
                     }
                     MapTag root = SaveManager.serializePrefab(id, bodyNames);
                     SaveManager.saveToFile(root, fileName);

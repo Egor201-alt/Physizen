@@ -33,9 +33,12 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -87,6 +90,7 @@ public final class SaveManager {
                 dispMap.putObject("interpolation_duration", new ElementTag(b.interpolationDuration));
                 dispMap.putObject("teleport_duration", new ElementTag(b.teleportDuration));
                 dispMap.putObject("interpolation_start", new ElementTag(b.interpolationStart));
+                dispMap.putObject("rotation_offset", new QuaternionTag(b.rotationOffset.x, b.rotationOffset.y, b.rotationOffset.z, b.rotationOffset.w));
                 dispMap.putObject("remove_with_body", new ElementTag(b.removeWithBody));
 
                 if (b.entity instanceof BlockDisplay) {
@@ -163,15 +167,42 @@ public final class SaveManager {
         return root;
     }
 
-    public static void saveToFile(MapTag root, String fileName) {
-        File folder = Util.getSaveFolder();
-        if (!fileName.endsWith(".json")) {
-            fileName += ".json";
+    private static File resolveFile(String fileName, boolean write) {
+        if (fileName == null || fileName.trim().isEmpty() || fileName.contains("..") || fileName.startsWith("/") || fileName.startsWith("\\") || fileName.contains(":")) {
+            throw new PhysException("Invalid save file name.");
         }
-        File file = new File(folder, fileName);
-        try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
+        String n = fileName.trim();
+        String lower = n.toLowerCase();
+        File folder = Util.getSaveFolder();
+        if (write) {
+            if (!lower.endsWith(".json") && !lower.endsWith(".phys")) {
+                n += ".phys";
+            }
+            File f = new File(folder, n);
+            if (f.getParentFile() != null) {
+                f.getParentFile().mkdirs();
+            }
+            return f;
+        }
+        if (lower.endsWith(".json") || lower.endsWith(".phys")) {
+            return new File(folder, n);
+        }
+        File phys = new File(folder, n + ".phys");
+        return phys.isFile() ? phys : new File(folder, n + ".json");
+    }
+
+    public static void saveToFile(MapTag root, String fileName) {
+        File file = resolveFile(fileName, true);
+        try {
             Object unpacked = unpack(root);
-            GSON.toJson(unpacked, writer);
+            if (file.getName().toLowerCase().endsWith(".json")) {
+                try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
+                    GSON.toJson(unpacked, writer);
+                }
+            }
+            else {
+                Files.write(file.toPath(), PhysBinary.encodeFile(unpacked));
+            }
         }
         catch (Exception e) {
             throw new PhysException("Failed to save prefab to " + file.getName() + ": " + e.getMessage(), e);
@@ -179,16 +210,19 @@ public final class SaveManager {
     }
 
     public static MapTag loadFromFile(String fileName) {
-        File folder = Util.getSaveFolder();
-        if (!fileName.endsWith(".json")) {
-            fileName += ".json";
-        }
-        File file = new File(folder, fileName);
+        File file = resolveFile(fileName, false);
         if (!file.isFile()) {
             throw new PhysException("Save file not found: " + file.getName());
         }
-        try (BufferedReader reader = new BufferedReader(new FileReader(file, StandardCharsets.UTF_8))) {
-            Object raw = GSON.fromJson(reader, Object.class);
+        try {
+            byte[] data = Files.readAllBytes(file.toPath());
+            Object raw;
+            if (PhysBinary.isFile(data)) {
+                raw = PhysBinary.decodeFile(data);
+            }
+            else {
+                raw = GSON.fromJson(new String(data, StandardCharsets.UTF_8), Object.class);
+            }
             return (MapTag) pack(raw);
         }
         catch (Exception e) {
@@ -198,15 +232,56 @@ public final class SaveManager {
 
     public static List<String> listSavedFiles() {
         File folder = Util.getSaveFolder();
-        File[] files = folder.listFiles((dir, name) -> name.endsWith(".json"));
-        List<String> list = new ArrayList<>();
+        File[] files = folder.listFiles((dir, name) -> name.endsWith(".json") || name.endsWith(".phys"));
+        Set<String> names = new LinkedHashSet<>();
         if (files != null) {
             for (File f : files) {
                 String name = f.getName();
-                list.add(name.substring(0, name.length() - 5));
+                names.add(name.substring(0, name.length() - 5));
             }
         }
-        return list;
+        return new ArrayList<>(names);
+    }
+
+    public static byte[] toBlob(MapTag map) throws IOException {
+        return PhysBinary.encodeRaw(unpack(map));
+    }
+
+    public static MapTag fromBlob(byte[] data) throws IOException {
+        return (MapTag) pack(PhysBinary.decodeRaw(data));
+    }
+
+    public static BodyDef defFromMap(MapTag bMap, String name) {
+        BodyDef def = new BodyDef();
+        def.name = name;
+        def.shape = Util.shape(bMap.getObject("shape").asType(MapTag.class, CoreUtilities.noDebugContext), CoreUtilities.noDebugContext);
+        if (bMap.containsKey("type")) {
+            def.type = MotionKind.valueOf(bMap.getElement("type").asString().toUpperCase());
+        }
+        def.position = Util.vec(bMap.getObject("position"), CoreUtilities.noDebugContext);
+        def.rotation = Util.rotation(bMap.getObject("rotation"), CoreUtilities.noDebugContext);
+        if (bMap.containsKey("velocity")) {
+            def.linearVelocity = Util.vec(bMap.getObject("velocity"), CoreUtilities.noDebugContext);
+        }
+        if (bMap.containsKey("angular_velocity")) {
+            def.angularVelocity = Util.vec(bMap.getObject("angular_velocity"), CoreUtilities.noDebugContext);
+        }
+        def.mass = Util.num(bMap.getObject("mass"), 0);
+        def.friction = Util.num(bMap.getObject("friction"), 0.5);
+        def.restitution = Util.num(bMap.getObject("restitution"), 0.0);
+        def.linearDamping = Util.num(bMap.getObject("linear_damping"), 0.05);
+        def.angularDamping = Util.num(bMap.getObject("angular_damping"), 0.05);
+        def.gravityFactor = Util.num(bMap.getObject("gravity"), 1.0);
+        def.group = (int) Util.num(bMap.getObject("group"), 0);
+        def.sensor = Util.bool(bMap.getObject("sensor"), false);
+        def.continuous = Util.bool(bMap.getObject("continuous"), false);
+        def.allowSleeping = Util.bool(bMap.getObject("allow_sleeping"), true);
+        def.notify = Util.bool(bMap.getObject("notify"), true);
+        def.removeOnFallOut = Util.bool(bMap.getObject("remove_on_fall"), true);
+        def.tag = Util.str(bMap.getObject("tag"), "");
+        def.maxLinearVelocity = Util.num(bMap.getObject("max_velocity"), 500);
+        def.maxAngularVelocity = Util.num(bMap.getObject("max_angular_velocity"), 47.1238898);
+        return def;
     }
 
     public static List<String> spawnPrefab(String worldId, MapTag root, double[] targetPos, double[] targetRot, String prefix, String overrideName) {
@@ -332,12 +407,17 @@ public final class SaveManager {
                             double[] s = Util.vec(dMap.getObject("scale"), CoreUtilities.noDebugContext);
                             binding.scale = new Vector3f((float) s[0], (float) s[1], (float) s[2]);
                         }
+                        if (dMap.containsKey("rotation_offset")) {
+                            double[] ro = Util.rotation(dMap.getObject("rotation_offset"), CoreUtilities.noDebugContext);
+                            binding.rotationOffset = new Quaternionf((float) ro[0], (float) ro[1], (float) ro[2], (float) ro[3]);
+                        }
                         binding.interpolationDuration = (int) Util.num(dMap.getObject("interpolation_duration"), 3);
                         binding.teleportDuration = (int) Util.num(dMap.getObject("teleport_duration"), 3);
                         binding.interpolationStart = (int) Util.num(dMap.getObject("interpolation_start"), 0);
                         binding.removeWithBody = Util.bool(dMap.getObject("remove_with_body"), true);
 
                         Physizen.getInstance().getDisplayBinder().bind(worldId, finalName, binding);
+                        Physizen.getInstance().getPersistence().persist(spawned, worldId, finalName);
                     }
                 }
             }

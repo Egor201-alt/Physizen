@@ -51,6 +51,8 @@ public final class ShapeSpec {
     public int segments = 16;
     public float[] vertices;
     public int[] indices;
+    public String sourceFile;
+    public double sourceScale = 1;
     public final List<Child> children = new ArrayList<>();
 
     public static ShapeSpec box(double x, double y, double z) {
@@ -102,6 +104,8 @@ public final class ShapeSpec {
             }
         }
         copy.indices = indices == null ? null : indices.clone();
+        copy.sourceFile = sourceFile;
+        copy.sourceScale = sourceScale * factor;
         for (Child child : children) {
             Child scaledChild = new Child();
             scaledChild.shape = child.shape.scaled(factor);
@@ -330,7 +334,11 @@ public final class ShapeSpec {
                 break;
             case HULL:
             case MESH:
-                if (vertices != null) {
+                if (sourceFile != null) {
+                    map.putObject("file", new ElementTag(sourceFile));
+                    map.putObject("scale", new ElementTag(sourceScale));
+                }
+                else if (vertices != null) {
                     ListTag points = new ListTag();
                     for (int i = 0; i + 2 < vertices.length; i += 3) {
                         points.add(vertices[i] + "," + vertices[i + 1] + "," + vertices[i + 2]);

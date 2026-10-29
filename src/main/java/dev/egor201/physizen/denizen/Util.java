@@ -338,6 +338,8 @@ public final class Util {
                 ObjParser parsed = ObjParser.parse(f, scale);
                 spec.vertices = parsed.vertices;
                 spec.indices = spec.kind == ShapeSpec.Kind.MESH ? parsed.indices : null;
+                spec.sourceFile = name;
+                spec.sourceScale = scale;
             }
             catch (Exception e) {
                 throw new PhysException("Failed to read model: " + e.getMessage());

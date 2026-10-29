@@ -36,6 +36,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
     private DisplayBinder displayBinder;
     private TerrainManager terrainManager;
     private HitboxManager hitboxManager;
+    private PersistenceManager persistence;
     private final Map<String, World> worldAttachments = new ConcurrentHashMap<>();
     private long currentTick = 0;
 
@@ -53,6 +54,10 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
     public HitboxManager getHitboxManager() {
         return hitboxManager;
+    }
+
+    public PersistenceManager getPersistence() {
+        return persistence;
     }
 
     public void attachWorld(String worldId, World world) {
@@ -118,6 +123,10 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         hitboxManager = new HitboxManager();
         getServer().getPluginManager().registerEvents(hitboxManager, this);
         Util.init(this);
+        persistence = new PersistenceManager(this, getConfig());
+        if (persistence.enabled()) {
+            getServer().getPluginManager().registerEvents(persistence, this);
+        }
 
         ObjectFetcher.registerWithObjectFetcher(PhysWorldTag.class, PhysWorldTag.tagProcessor);
         ObjectFetcher.registerWithObjectFetcher(PhysBodyTag.class, PhysBodyTag.tagProcessor);
@@ -147,6 +156,8 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
         PhysScriptEvents.registerAll();
 
+        Bukkit.getScheduler().runTask(this, persistence::scanLoaded);
+
         if (getCommand("physizen") != null) {
             getCommand("physizen").setExecutor(this);
         }
@@ -155,6 +166,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
             currentTick++;
             hitboxManager.tick();
             displayBinder.tick();
+            persistence.tick(currentTick);
             terrainManager.tick(currentTick);
 
             PhysEngine engine = PhysEngine.get();
@@ -173,6 +185,9 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
     @Override
     public void onDisable() {
+        if (persistence != null && PhysEngine.get() != null) {
+            persistence.refreshAll();
+        }
         if (hitboxManager != null) {
             hitboxManager.clear();
         }

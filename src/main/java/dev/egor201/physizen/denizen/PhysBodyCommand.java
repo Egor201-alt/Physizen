@@ -289,6 +289,7 @@ public class PhysBodyCommand extends AbstractCommand {
 
                         binding.removeWithBody = Util.bool(scriptEntry.getObjectTag("remove_with_body"), true);
                         Physizen.getInstance().getDisplayBinder().bind(worldId, name, binding);
+                        Physizen.getInstance().getPersistence().persist(et.getBukkitEntity(), worldId, name);
                     }
                     break;
                 }

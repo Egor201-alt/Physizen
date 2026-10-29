@@ -69,10 +69,78 @@ public class DisplayBinder {
         lastSteps.remove(key);
     }
 
+    public interface Visitor {
+
+        void visit(String worldId, String bodyName, Binding binding);
+    }
+
+    private static void forget(Entity entity) {
+        PersistenceManager persistence = Physizen.getInstance().getPersistence();
+        if (persistence != null) {
+            persistence.forget(entity);
+        }
+    }
+
+    public Binding bindingOf(String worldId, String bodyName, UUID entityUuid) {
+        List<Binding> list = bindings.get(new BodyKey(worldId, bodyName));
+        if (list == null) {
+            return null;
+        }
+        synchronized (list) {
+            for (Binding b : list) {
+                if (b.entity.getUniqueId().equals(entityUuid)) {
+                    return b;
+                }
+            }
+        }
+        return null;
+    }
+
+    public boolean isBound(String worldId, String bodyName, UUID entityUuid) {
+        return bindingOf(worldId, bodyName, entityUuid) != null;
+    }
+
+    public void forEachBinding(Visitor visitor) {
+        for (Map.Entry<BodyKey, List<Binding>> entry : bindings.entrySet()) {
+            List<Binding> copy;
+            synchronized (entry.getValue()) {
+                copy = new ArrayList<>(entry.getValue());
+            }
+            for (Binding b : copy) {
+                visitor.visit(entry.getKey().worldId, entry.getKey().bodyName, b);
+            }
+        }
+    }
+
+    public int release(String worldId, String bodyName, UUID entityUuid) {
+        BodyKey key = new BodyKey(worldId, bodyName);
+        List<Binding> list = bindings.get(key);
+        if (list == null) {
+            return 0;
+        }
+        int left;
+        synchronized (list) {
+            list.removeIf(b -> b.entity.getUniqueId().equals(entityUuid));
+            left = list.size();
+        }
+        if (left == 0) {
+            bindings.remove(key);
+            lastSteps.remove(key);
+        }
+        return left;
+    }
+
     public void unbind(String worldId, String bodyName, UUID entityUuid) {
         BodyKey key = new BodyKey(worldId, bodyName);
         List<Binding> list = bindings.get(key);
         if (list != null) {
+            synchronized (list) {
+                for (Binding b : list) {
+                    if (b.entity.getUniqueId().equals(entityUuid)) {
+                        forget(b.entity);
+                    }
+                }
+            }
             list.removeIf(b -> b.entity.getUniqueId().equals(entityUuid));
             if (list.isEmpty()) {
                 bindings.remove(key);
@@ -89,6 +157,9 @@ public class DisplayBinder {
             for (Binding b : removed) {
                 if (b.removeWithBody && b.entity.isValid()) {
                     b.entity.remove();
+                }
+                else {
+                    forget(b.entity);
                 }
             }
         }
@@ -167,6 +238,9 @@ public class DisplayBinder {
                     for (Binding b : list) {
                         if (b.removeWithBody && b.entity.isValid()) {
                             b.entity.remove();
+                        }
+                        else {
+                            forget(b.entity);
                         }
                     }
                 }
