@@ -3,19 +3,25 @@ package dev.egor201.physizen.denizen;
 import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import dev.egor201.physizen.Physizen;
+import dev.egor201.physizen.SaveManager;
+import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysEngine;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.PhysWorld;
 import org.bukkit.Bukkit;
 import org.bukkit.World;
 
+import java.util.ArrayList;
+import java.util.List;
+
 // <--[command]
 // @Name physworld
-// @Syntax physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh] (id:<id>) ...
+// @Syntax physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh/save/load] (id:<id>) ...
 // @Required 1
 // @Maximum 12
 // @Short Controls Physizen physics worlds.
@@ -25,7 +31,7 @@ public class PhysWorldCommand extends AbstractCommand {
 
     public PhysWorldCommand() {
         setName("physworld");
-        setSyntax("physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh] (id:<id>) ...");
+        setSyntax("physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh/save/load] (id:<id>) ...");
         setRequiredArguments(1, 12);
         isProcedural = false;
     }
@@ -173,6 +179,31 @@ public class PhysWorldCommand extends AbstractCommand {
                         return;
                     }
                     Physizen.getInstance().getTerrainManager().invalidateArea(id, min, max);
+                    break;
+                }
+                case "save": {
+                    if (!scriptEntry.hasObject("file")) {
+                        Debug.echoError(scriptEntry, "physworld save needs file:<filename>.");
+                        return;
+                    }
+                    String fileName = scriptEntry.getElement("file").asString();
+                    PhysWorld pw = Util.world(id);
+                    List<String> bodyNames = new ArrayList<>();
+                    for (PhysBody pb : pw.bodies()) {
+                        bodyNames.add(pb.name);
+                    }
+                    MapTag root = SaveManager.serializePrefab(id, bodyNames);
+                    SaveManager.saveToFile(root, fileName);
+                    break;
+                }
+                case "load": {
+                    if (!scriptEntry.hasObject("file")) {
+                        Debug.echoError(scriptEntry, "physworld load needs file:<filename>.");
+                        return;
+                    }
+                    String fileName = scriptEntry.getElement("file").asString();
+                    MapTag root = SaveManager.loadFromFile(fileName);
+                    SaveManager.spawnPrefab(id, root, null, null, "", null);
                     break;
                 }
                 default:

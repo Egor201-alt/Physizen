@@ -1,5 +1,9 @@
 package dev.egor201.physizen.core;
 
+import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.ListTag;
+import com.denizenscript.denizencore.objects.core.MapTag;
+import com.denizenscript.denizencore.objects.core.QuaternionTag;
 import com.github.stephengold.joltjni.BoxShape;
 import com.github.stephengold.joltjni.CapsuleShape;
 import com.github.stephengold.joltjni.ConvexHullShapeSettings;
@@ -299,5 +303,59 @@ public final class ShapeSpec {
         buffer.put(data, 0, length);
         buffer.flip();
         return buffer;
+    }
+
+    public MapTag toMap() {
+        MapTag map = new MapTag();
+        map.putObject("type", new ElementTag(kind.name().toLowerCase()));
+        switch (kind) {
+            case BOX:
+                map.putObject("size", new ElementTag(sizeX + "," + sizeY + "," + sizeZ));
+                break;
+            case SPHERE:
+                map.putObject("radius", new ElementTag(radius));
+                break;
+            case CAPSULE:
+                map.putObject("radius", new ElementTag(radius));
+                map.putObject("height", new ElementTag(height));
+                break;
+            case CYLINDER:
+                map.putObject("radius", new ElementTag(radius));
+                map.putObject("height", new ElementTag(height));
+                break;
+            case CONE:
+                map.putObject("radius", new ElementTag(radius));
+                map.putObject("height", new ElementTag(height));
+                map.putObject("segments", new ElementTag(segments));
+                break;
+            case HULL:
+            case MESH:
+                if (vertices != null) {
+                    ListTag points = new ListTag();
+                    for (int i = 0; i + 2 < vertices.length; i += 3) {
+                        points.add(vertices[i] + "," + vertices[i + 1] + "," + vertices[i + 2]);
+                    }
+                    map.putObject("points", points);
+                }
+                if (indices != null && kind == Kind.MESH) {
+                    ListTag triangles = new ListTag();
+                    for (int idx : indices) {
+                        triangles.add(String.valueOf(idx));
+                    }
+                    map.putObject("triangles", triangles);
+                }
+                break;
+            case COMPOUND:
+                ListTag list = new ListTag();
+                for (Child child : children) {
+                    MapTag childMap = child.shape.toMap();
+                    childMap.putObject("offset", new ElementTag(child.offset[0] + "," + child.offset[1] + "," + child.offset[2]));
+                    childMap.putObject("rotation", new QuaternionTag(child.rotation[0], child.rotation[1], child.rotation[2], child.rotation[3]));
+                    list.addObject(childMap);
+                }
+                map.putObject("children", list);
+                break;
+        }
+        return map;
     }
 }

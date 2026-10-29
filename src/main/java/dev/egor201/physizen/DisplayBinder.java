@@ -140,6 +140,15 @@ public class DisplayBinder {
         return result;
     }
 
+    public List<Binding> getBindings(String worldId, String bodyName) {
+        BodyKey key = new BodyKey(worldId, bodyName);
+        List<Binding> list = bindings.get(key);
+        if (list == null) return Collections.emptyList();
+        synchronized (list) {
+            return new ArrayList<>(list);
+        }
+    }
+
     public void tick() {
         PhysEngine engine = PhysEngine.get();
         if (engine == null) return;

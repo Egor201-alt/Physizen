@@ -389,5 +389,16 @@ public class PhysWorldTag implements ObjectTag {
             }
             return map;
         });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.saved_prefabs>
+        // @returns ListTag
+        // @description
+        // Returns the list of all saved prefab/body files in plugins/Physizen/saves/.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "saved_prefabs", (attribute, object) -> {
+            return new ListTag(dev.egor201.physizen.SaveManager.listSavedFiles());
+        });
     }
 }

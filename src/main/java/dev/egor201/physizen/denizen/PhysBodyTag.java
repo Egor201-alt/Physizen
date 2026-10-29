@@ -316,6 +316,19 @@ public class PhysBodyTag implements ObjectTag {
             if (owner == null) return null;
             return new PlayerTag(owner);
         });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.to_map>
+        // @returns MapTag
+        // @description
+        // Returns a serializable MapTag containing all definition properties and bound displays of this body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, "to_map", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            return dev.egor201.physizen.SaveManager.serializeBody(object.worldId, b);
+        });
     }
 
     @Override
