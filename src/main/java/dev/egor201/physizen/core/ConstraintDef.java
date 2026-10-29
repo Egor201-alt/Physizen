@@ -11,6 +11,12 @@ public final class ConstraintDef {
         CONE
     }
 
+    public enum MotorState {
+        OFF,
+        VELOCITY,
+        POSITION
+    }
+
     public String name;
     public Kind kind = Kind.POINT;
     public String bodyA;
@@ -26,4 +32,11 @@ public final class ConstraintDef {
     public double springDamping = 0.5;
     public double maxFriction = 0;
     public double halfConeAngle = 0.7853981634;
+
+    public MotorState motorState = MotorState.OFF;
+    public double motorTarget = 0;
+    public double motorMaxTorque = 0;
+    public double motorMaxForce = 0;
+    public double motorSpringFrequency = 2.0;
+    public double motorSpringDamping = 1.0;
 }

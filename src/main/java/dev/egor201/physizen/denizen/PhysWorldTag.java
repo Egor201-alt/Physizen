@@ -9,6 +9,7 @@ import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
+import dev.egor201.physizen.core.ConstraintDef;
 import dev.egor201.physizen.core.FieldDef;
 import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysEngine;
@@ -236,6 +237,68 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, "constraints", (attribute, object) -> new ListTag(need(object).constraintNames()));
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.constraint_type[<name>]>
+        // @returns ElementTag
+        // @description
+        // Returns the kind of constraint (FIXED, POINT, HINGE, SLIDER, DISTANCE, CONE), or null if not found.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "constraint_type", (attribute, object, param) -> {
+            ConstraintDef def = need(object).constraintDef(param.asString());
+            return def == null ? null : new ElementTag(def.kind.name());
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.constraint_angle[<name>]>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the current angle in radians for a hinge constraint, or null if not found/not a hinge.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "constraint_angle", (attribute, object, param) -> {
+            Double angle = need(object).constraintAngle(param.asString());
+            return angle == null ? null : new ElementTag(angle);
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.constraint_position[<name>]>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the current translation position in meters for a slider constraint, or null if not found/not a slider.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "constraint_position", (attribute, object, param) -> {
+            Double pos = need(object).constraintPosition(param.asString());
+            return pos == null ? null : new ElementTag(pos);
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.constraint_motor[<name>]>
+        // @returns MapTag
+        // @description
+        // Returns motor information (state, target, max_torque/max_force, spring_frequency, spring_damping) for a hinge or slider constraint.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, ElementTag.class, "constraint_motor", (attribute, object, param) -> {
+            ConstraintDef def = need(object).constraintDef(param.asString());
+            if (def == null || (def.kind != ConstraintDef.Kind.HINGE && def.kind != ConstraintDef.Kind.SLIDER)) {
+                return null;
+            }
+            MapTag map = new MapTag();
+            map.putObject("state", new ElementTag(def.motorState.name().toLowerCase()));
+            map.putObject("target", new ElementTag(def.motorTarget));
+            if (def.kind == ConstraintDef.Kind.HINGE) {
+                map.putObject("max_torque", new ElementTag(def.motorMaxTorque));
+            }
+            else {
+                map.putObject("max_force", new ElementTag(def.motorMaxForce));
+            }
+            map.putObject("spring_frequency", new ElementTag(def.motorSpringFrequency));
+            map.putObject("spring_damping", new ElementTag(def.motorSpringDamping));
+            return map;
+        });
 
         // <--[tag]
         // @attribute <PhysWorldTag.fields>
