@@ -5,26 +5,28 @@ import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException
 import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import dev.egor201.physizen.DisplayBinder;
 import dev.egor201.physizen.Physizen;
+import dev.egor201.physizen.SaveManager;
 import dev.egor201.physizen.core.BodyDef;
 import dev.egor201.physizen.core.MotionKind;
 import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.PhysWorld;
 import dev.egor201.physizen.core.ShapeSpec;
-import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
+import java.util.ArrayList;
 import java.util.List;
 
 // <--[command]
 // @Name physbody
-// @Syntax physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate] (world:<world>) (name:<name>) ...
+// @Syntax physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate/save/load] (world:<world>) (name:<name>) ...
 // @Required 1
 // @Maximum 24
 // @Short Controls Physizen physical bodies.
@@ -34,7 +36,7 @@ public class PhysBodyCommand extends AbstractCommand {
 
     public PhysBodyCommand() {
         setName("physbody");
-        setSyntax("physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate] (world:<world>) (name:<name>) ...");
+        setSyntax("physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate/save/load] (world:<world>) (name:<name>) ...");
         setRequiredArguments(1, 24);
         isProcedural = false;
     }
@@ -68,8 +70,8 @@ public class PhysBodyCommand extends AbstractCommand {
         String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : "default";
         String name = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
 
-        if (name == null) {
-            Debug.echoError(scriptEntry, "physbody needs name:<id>.");
+        if (name == null && !act.equals("load") && !act.equals("paste") && !act.equals("spawn") && !act.equals("save")) {
+            Debug.echoError(scriptEntry, "physbody " + act + " needs name:<id>.");
             return;
         }
 
@@ -287,6 +289,7 @@ public class PhysBodyCommand extends AbstractCommand {
 
                         binding.removeWithBody = Util.bool(scriptEntry.getObjectTag("remove_with_body"), true);
                         Physizen.getInstance().getDisplayBinder().bind(worldId, name, binding);
+                        Physizen.getInstance().getPersistence().persist(et.getBukkitEntity(), worldId, name);
                     }
                     break;
                 }
@@ -295,6 +298,55 @@ public class PhysBodyCommand extends AbstractCommand {
                     for (EntityTag et : ents) {
                         Physizen.getInstance().getDisplayBinder().unbind(worldId, name, et.getBukkitEntity().getUniqueId());
                     }
+                    break;
+                }
+                case "save": {
+                    if (!scriptEntry.hasObject("file")) {
+                        Debug.echoError(scriptEntry, "physbody save needs file:<name>.");
+                        return;
+                    }
+                    String fileName = scriptEntry.getElement("file").asString();
+                    MapTag result;
+                    if (scriptEntry.hasObject("bodies")) {
+                        ListTag bList = ((ObjectTag) scriptEntry.getObjectTag("bodies")).asType(ListTag.class, scriptEntry.context);
+                        List<String> names = new ArrayList<>();
+                        for (ObjectTag obj : bList.objectForms) {
+                            names.add(obj.toString());
+                        }
+                        result = SaveManager.serializePrefab(worldId, names);
+                    }
+                    else if (name != null) {
+                        PhysBody pb = w.body(name);
+                        if (pb == null) {
+                            Debug.echoError(scriptEntry, "Unknown body: " + name);
+                            return;
+                        }
+                        result = SaveManager.serializeBody(worldId, pb);
+                    }
+                    else {
+                        Debug.echoError(scriptEntry, "physbody save needs name:<name> or bodies:<list>.");
+                        return;
+                    }
+                    SaveManager.saveToFile(result, fileName);
+                    break;
+                }
+                case "load":
+                case "paste":
+                case "spawn": {
+                    if (!scriptEntry.hasObject("file")) {
+                        Debug.echoError(scriptEntry, "physbody load needs file:<name>.");
+                        return;
+                    }
+                    String fileName = scriptEntry.getElement("file").asString();
+                    MapTag root = SaveManager.loadFromFile(fileName);
+                    double[] targetPos = scriptEntry.hasObject("at") || scriptEntry.hasObject("position")
+                            ? Util.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context)
+                            : null;
+                    double[] targetRot = readRotation(scriptEntry);
+                    String prefix = scriptEntry.hasObject("prefix") ? scriptEntry.getElement("prefix").asString() : "";
+                    String overrideName = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
+
+                    SaveManager.spawnPrefab(worldId, root, targetPos, targetRot, prefix, overrideName);
                     break;
                 }
                 default:

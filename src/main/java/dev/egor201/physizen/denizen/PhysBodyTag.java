@@ -8,6 +8,7 @@ import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.QuaternionTag;
+import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
@@ -315,6 +316,19 @@ public class PhysBodyTag implements ObjectTag {
             UUID owner = Physizen.getInstance().getHitboxManager().ownerOf(object.worldId, object.name);
             if (owner == null) return null;
             return new PlayerTag(owner);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.to_map>
+        // @returns MapTag
+        // @description
+        // Returns a serializable MapTag containing all definition properties and bound displays of this body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, "to_map", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            return dev.egor201.physizen.SaveManager.serializeBody(object.worldId, b);
         });
     }
 

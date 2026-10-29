@@ -25,6 +25,7 @@ import java.util.List;
 public final class Util {
 
     private static File modelFolder;
+    private static File saveFolder;
 
     private Util() {
     }
@@ -32,6 +33,12 @@ public final class Util {
     public static void init(JavaPlugin plugin) {
         modelFolder = new File(plugin.getDataFolder(), "models");
         modelFolder.mkdirs();
+        saveFolder = new File(plugin.getDataFolder(), "saves");
+        saveFolder.mkdirs();
+    }
+
+    public static File getSaveFolder() {
+        return saveFolder;
     }
 
     public static ObjectTag tagVec(double[] v) {
@@ -331,6 +338,8 @@ public final class Util {
                 ObjParser parsed = ObjParser.parse(f, scale);
                 spec.vertices = parsed.vertices;
                 spec.indices = spec.kind == ShapeSpec.Kind.MESH ? parsed.indices : null;
+                spec.sourceFile = name;
+                spec.sourceScale = scale;
             }
             catch (Exception e) {
                 throw new PhysException("Failed to read model: " + e.getMessage());
