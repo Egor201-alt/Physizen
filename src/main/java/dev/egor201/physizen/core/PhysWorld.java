@@ -10,7 +10,9 @@ import com.github.stephengold.joltjni.CustomBodyActivationListener;
 import com.github.stephengold.joltjni.CustomContactListener;
 import com.github.stephengold.joltjni.DistanceConstraintSettings;
 import com.github.stephengold.joltjni.FixedConstraintSettings;
+import com.github.stephengold.joltjni.HingeConstraint;
 import com.github.stephengold.joltjni.HingeConstraintSettings;
+import com.github.stephengold.joltjni.MotorSettings;
 import com.github.stephengold.joltjni.ObjVsBpFilter;
 import com.github.stephengold.joltjni.ObjectLayerPairFilterTable;
 import com.github.stephengold.joltjni.PhysicsSystem;
@@ -20,6 +22,7 @@ import com.github.stephengold.joltjni.RVec3;
 import com.github.stephengold.joltjni.RRayCast;
 import com.github.stephengold.joltjni.RayCastResult;
 import com.github.stephengold.joltjni.ShapeRefC;
+import com.github.stephengold.joltjni.SliderConstraint;
 import com.github.stephengold.joltjni.SliderConstraintSettings;
 import com.github.stephengold.joltjni.SpringSettings;
 import com.github.stephengold.joltjni.TwoBodyConstraint;
@@ -29,6 +32,7 @@ import com.github.stephengold.joltjni.enumerate.EActivation;
 import com.github.stephengold.joltjni.enumerate.EConstraintSpace;
 import com.github.stephengold.joltjni.enumerate.EMotionQuality;
 import com.github.stephengold.joltjni.enumerate.EMotionType;
+import com.github.stephengold.joltjni.enumerate.EMotorState;
 import com.github.stephengold.joltjni.enumerate.EOverrideMassProperties;
 import com.github.stephengold.joltjni.enumerate.ESpringMode;
 
@@ -62,6 +66,7 @@ public final class PhysWorld {
     private final ConcurrentHashMap<Integer, PhysBody> byJoltId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Object> constraints = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String[]> constraintBodies = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ConstraintDef> constraintDefs = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, FieldDef> fields = new ConcurrentHashMap<>();
     private final ReentrantReadWriteLock queryLock = new ReentrantReadWriteLock();
     private final Logger log;
@@ -201,6 +206,10 @@ public final class PhysWorld {
 
     public List<String> constraintNames() {
         return new ArrayList<>(constraints.keySet());
+    }
+
+    public ConstraintDef constraintDef(String name) {
+        return constraintDefs.get(name);
     }
 
     public List<FieldDef> fieldDefs() {
@@ -363,6 +372,7 @@ public final class PhysWorld {
         }
         constraints.put(def.name, Boolean.TRUE);
         constraintBodies.put(def.name, new String[]{def.bodyA, def.bodyB});
+        constraintDefs.put(def.name, def);
         post(() -> instantiateConstraint(def, a, b));
     }
 
@@ -400,6 +410,25 @@ public final class PhysWorld {
                     }
                     s.setMaxFrictionTorque((float) def.maxFriction);
                     made = s.create(body1, body2);
+
+                    HingeConstraint hinge = made instanceof HingeConstraint ? (HingeConstraint) made : new HingeConstraint(made.va());
+                    if (def.motorMaxTorque > 0) {
+                        hinge.getMotorSettings().setTorqueLimit((float) def.motorMaxTorque);
+                    }
+                    if (def.motorSpringFrequency > 0) {
+                        SpringSettings ss = hinge.getMotorSettings().getSpringSettings();
+                        ss.setMode(ESpringMode.FrequencyAndDamping);
+                        ss.setFrequency((float) def.motorSpringFrequency);
+                        ss.setDamping((float) def.motorSpringDamping);
+                    }
+                    if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
+                        hinge.setMotorState(EMotorState.Velocity);
+                        hinge.setTargetAngularVelocity((float) def.motorTarget);
+                    }
+                    else if (def.motorState == ConstraintDef.MotorState.POSITION) {
+                        hinge.setMotorState(EMotorState.Position);
+                        hinge.setTargetAngle((float) def.motorTarget);
+                    }
                     break;
                 }
                 case SLIDER: {
@@ -413,6 +442,25 @@ public final class PhysWorld {
                     }
                     s.setMaxFrictionForce((float) def.maxFriction);
                     made = s.create(body1, body2);
+
+                    SliderConstraint slider = made instanceof SliderConstraint ? (SliderConstraint) made : new SliderConstraint(made.va());
+                    if (def.motorMaxForce > 0) {
+                        slider.getMotorSettings().setForceLimit((float) def.motorMaxForce);
+                    }
+                    if (def.motorSpringFrequency > 0) {
+                        SpringSettings ss = slider.getMotorSettings().getSpringSettings();
+                        ss.setMode(ESpringMode.FrequencyAndDamping);
+                        ss.setFrequency((float) def.motorSpringFrequency);
+                        ss.setDamping((float) def.motorSpringDamping);
+                    }
+                    if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
+                        slider.setMotorState(EMotorState.Velocity);
+                        slider.setTargetVelocity((float) def.motorTarget);
+                    }
+                    else if (def.motorState == ConstraintDef.MotorState.POSITION) {
+                        slider.setMotorState(EMotorState.Position);
+                        slider.setTargetPosition((float) def.motorTarget);
+                    }
                     break;
                 }
                 case DISTANCE: {
@@ -459,12 +507,155 @@ public final class PhysWorld {
         catch (Throwable t) {
             constraints.remove(def.name);
             constraintBodies.remove(def.name);
+            constraintDefs.remove(def.name);
             log.warning("Failed to create constraint " + def.name + ": " + t.getMessage());
+        }
+    }
+
+    public void setConstraintMotor(String name, ConstraintDef.MotorState state, Double target, Double maxForceOrTorque, Double springFreq, Double springDamp) {
+        post(() -> {
+            Object c = constraints.get(name);
+            ConstraintDef def = constraintDefs.get(name);
+            if (c == null || def == null) {
+                return;
+            }
+            if (!(c instanceof TwoBodyConstraint)) {
+                return;
+            }
+            TwoBodyConstraint tbc = (TwoBodyConstraint) c;
+
+            if (def.kind == ConstraintDef.Kind.HINGE) {
+                HingeConstraint hinge = tbc instanceof HingeConstraint ? (HingeConstraint) tbc : new HingeConstraint(tbc.va());
+                MotorSettings ms = hinge.getMotorSettings();
+                if (maxForceOrTorque != null && maxForceOrTorque > 0) {
+                    ms.setTorqueLimit(maxForceOrTorque.floatValue());
+                    def.motorMaxTorque = maxForceOrTorque;
+                }
+                if (springFreq != null && springFreq > 0) {
+                    SpringSettings ss = ms.getSpringSettings();
+                    ss.setMode(ESpringMode.FrequencyAndDamping);
+                    ss.setFrequency(springFreq.floatValue());
+                    if (springDamp != null) {
+                        ss.setDamping(springDamp.floatValue());
+                        def.motorSpringDamping = springDamp;
+                    }
+                    def.motorSpringFrequency = springFreq;
+                }
+                if (state != null) {
+                    def.motorState = state;
+                }
+                if (target != null) {
+                    def.motorTarget = target;
+                }
+                if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
+                    hinge.setMotorState(EMotorState.Velocity);
+                    hinge.setTargetAngularVelocity((float) def.motorTarget);
+                }
+                else if (def.motorState == ConstraintDef.MotorState.POSITION) {
+                    hinge.setMotorState(EMotorState.Position);
+                    hinge.setTargetAngle((float) def.motorTarget);
+                }
+                else {
+                    hinge.setMotorState(EMotorState.Off);
+                }
+                wakeConstraintBodies(name);
+            }
+            else if (def.kind == ConstraintDef.Kind.SLIDER) {
+                SliderConstraint slider = tbc instanceof SliderConstraint ? (SliderConstraint) tbc : new SliderConstraint(tbc.va());
+                MotorSettings ms = slider.getMotorSettings();
+                if (maxForceOrTorque != null && maxForceOrTorque > 0) {
+                    ms.setForceLimit(maxForceOrTorque.floatValue());
+                    def.motorMaxForce = maxForceOrTorque;
+                }
+                if (springFreq != null && springFreq > 0) {
+                    SpringSettings ss = ms.getSpringSettings();
+                    ss.setMode(ESpringMode.FrequencyAndDamping);
+                    ss.setFrequency(springFreq.floatValue());
+                    if (springDamp != null) {
+                        ss.setDamping(springDamp.floatValue());
+                        def.motorSpringDamping = springDamp;
+                    }
+                    def.motorSpringFrequency = springFreq;
+                }
+                if (state != null) {
+                    def.motorState = state;
+                }
+                if (target != null) {
+                    def.motorTarget = target;
+                }
+                if (def.motorState == ConstraintDef.MotorState.VELOCITY) {
+                    slider.setMotorState(EMotorState.Velocity);
+                    slider.setTargetVelocity((float) def.motorTarget);
+                }
+                else if (def.motorState == ConstraintDef.MotorState.POSITION) {
+                    slider.setMotorState(EMotorState.Position);
+                    slider.setTargetPosition((float) def.motorTarget);
+                }
+                else {
+                    slider.setMotorState(EMotorState.Off);
+                }
+                wakeConstraintBodies(name);
+            }
+        });
+    }
+
+    private void wakeConstraintBodies(String constraintName) {
+        String[] ends = constraintBodies.get(constraintName);
+        if (ends != null) {
+            for (String bName : ends) {
+                if (bName != null) {
+                    PhysBody pb = bodies.get(bName);
+                    if (pb != null && pb.ready && !pb.removed && pb.def.type != MotionKind.STATIC) {
+                        bodyInterface.activateBody(pb.joltId);
+                    }
+                }
+            }
+        }
+    }
+
+    public Double constraintAngle(String name) {
+        Object c = constraints.get(name);
+        if (c == null) return null;
+        queryLock.readLock().lock();
+        try {
+            if (c instanceof TwoBodyConstraint) {
+                TwoBodyConstraint tbc = (TwoBodyConstraint) c;
+                HingeConstraint hinge = tbc instanceof HingeConstraint ? (HingeConstraint) tbc : new HingeConstraint(tbc.va());
+                return (double) hinge.getCurrentAngle();
+            }
+            return null;
+        }
+        catch (Throwable t) {
+            return null;
+        }
+        finally {
+            queryLock.readLock().unlock();
+        }
+    }
+
+    public Double constraintPosition(String name) {
+        Object c = constraints.get(name);
+        if (c == null) return null;
+        queryLock.readLock().lock();
+        try {
+            if (c instanceof TwoBodyConstraint) {
+                TwoBodyConstraint tbc = (TwoBodyConstraint) c;
+                SliderConstraint slider = tbc instanceof SliderConstraint ? (SliderConstraint) tbc : new SliderConstraint(tbc.va());
+                return (double) slider.getCurrentPosition();
+            }
+            return null;
+        }
+        catch (Throwable t) {
+            return null;
+        }
+        finally {
+            queryLock.readLock().unlock();
         }
     }
 
     public boolean removeConstraint(String name) {
         constraintBodies.remove(name);
+        constraintDefs.remove(name);
         Object c = constraints.remove(name);
         if (c == null) {
             return false;
@@ -904,6 +1095,7 @@ public final class PhysWorld {
             }
             constraints.clear();
             constraintBodies.clear();
+            constraintDefs.clear();
         });
         drainInbox();
     }

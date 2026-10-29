@@ -5,6 +5,7 @@ import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
+import com.denizenscript.denizencore.utilities.CoreUtilities;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import dev.egor201.physizen.core.ConstraintDef;
 import dev.egor201.physizen.core.PhysException;
@@ -12,18 +13,18 @@ import dev.egor201.physizen.core.PhysWorld;
 
 // <--[command]
 // @Name physconstraint
-// @Syntax physconstraint [create/remove] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...
+// @Syntax physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...
 // @Required 2
-// @Maximum 20
-// @Short Creates or removes physical constraints (joints, hinges, sliders).
+// @Maximum 24
+// @Short Creates, removes, or controls physical constraints and joint motors.
 // @Group Physizen
 // -->
 public class PhysConstraintCommand extends AbstractCommand {
 
     public PhysConstraintCommand() {
         setName("physconstraint");
-        setSyntax("physconstraint [create/remove] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...");
-        setRequiredArguments(2, 20);
+        setSyntax("physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...");
+        setRequiredArguments(2, 24);
         isProcedural = false;
     }
 
@@ -65,6 +66,67 @@ public class PhysConstraintCommand extends AbstractCommand {
                 return;
             }
 
+            if (act.equals("motor") || act.equals("set")) {
+                String cName = nameTag.asString();
+                ConstraintDef existing = w.constraintDef(cName);
+                if (existing == null) {
+                    throw new PhysException("Unknown constraint '" + cName + "'.");
+                }
+                if (existing.kind != ConstraintDef.Kind.HINGE && existing.kind != ConstraintDef.Kind.SLIDER) {
+                    throw new PhysException("Constraint '" + cName + "' (" + existing.kind + ") does not support motors. Only hinge and slider constraints support motors.");
+                }
+
+                ConstraintDef.MotorState newState = null;
+                if (scriptEntry.hasObject("state") || scriptEntry.hasObject("motor_state") || scriptEntry.hasObject("motor")) {
+                    String stateStr = CoreUtilities.toLowerCase(scriptEntry.getElement(scriptEntry.hasObject("state") ? "state" : scriptEntry.hasObject("motor_state") ? "motor_state" : "motor").asString());
+                    if (stateStr.equals("velocity")) newState = ConstraintDef.MotorState.VELOCITY;
+                    else if (stateStr.equals("position")) newState = ConstraintDef.MotorState.POSITION;
+                    else if (stateStr.equals("off")) newState = ConstraintDef.MotorState.OFF;
+                    else throw new PhysException("Unknown motor state '" + stateStr + "', expected off, velocity, or position.");
+                }
+
+                boolean degrees = Util.bool(scriptEntry.getObjectTag("degrees"), false);
+                Double target = null;
+                if (scriptEntry.hasObject("target") || scriptEntry.hasObject("motor_target")) {
+                    target = Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("target") ? "target" : "motor_target"), 0);
+                    if (existing.kind == ConstraintDef.Kind.HINGE && degrees) {
+                        target = Math.toRadians(target);
+                    }
+                }
+                else if (scriptEntry.hasObject("velocity") || scriptEntry.hasObject("speed") || scriptEntry.hasObject("motor_velocity")) {
+                    target = Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("velocity") ? "velocity" : scriptEntry.hasObject("speed") ? "speed" : "motor_velocity"), 0);
+                    if (existing.kind == ConstraintDef.Kind.HINGE && degrees) {
+                        target = Math.toRadians(target);
+                    }
+                    if (newState == null) newState = ConstraintDef.MotorState.VELOCITY;
+                }
+                else if (scriptEntry.hasObject("angle") || scriptEntry.hasObject("position") || scriptEntry.hasObject("motor_angle") || scriptEntry.hasObject("motor_position")) {
+                    target = Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("angle") ? "angle" : scriptEntry.hasObject("position") ? "position" : scriptEntry.hasObject("motor_angle") ? "motor_angle" : "motor_position"), 0);
+                    if (existing.kind == ConstraintDef.Kind.HINGE && degrees) {
+                        target = Math.toRadians(target);
+                    }
+                    if (newState == null) newState = ConstraintDef.MotorState.POSITION;
+                }
+
+                Double limit = null;
+                if (scriptEntry.hasObject("torque") || scriptEntry.hasObject("motor_torque") || scriptEntry.hasObject("max_torque")) {
+                    limit = Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("torque") ? "torque" : scriptEntry.hasObject("motor_torque") ? "motor_torque" : "max_torque"), 0);
+                }
+                else if (scriptEntry.hasObject("force") || scriptEntry.hasObject("motor_force") || scriptEntry.hasObject("max_force")) {
+                    limit = Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("force") ? "force" : scriptEntry.hasObject("motor_force") ? "motor_force" : "max_force"), 0);
+                }
+
+                Double springFreq = (scriptEntry.hasObject("spring_freq") || scriptEntry.hasObject("motor_spring_freq"))
+                        ? Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("spring_freq") ? "spring_freq" : "motor_spring_freq"), 2.0)
+                        : null;
+                Double springDamp = (scriptEntry.hasObject("spring_damp") || scriptEntry.hasObject("motor_spring_damp"))
+                        ? Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("spring_damp") ? "spring_damp" : "motor_spring_damp"), 1.0)
+                        : null;
+
+                w.setConstraintMotor(cName, newState, target, limit, springFreq, springDamp);
+                return;
+            }
+
             if (act.equals("create")) {
                 ConstraintDef def = new ConstraintDef();
                 def.name = nameTag.asString();
@@ -79,12 +141,13 @@ public class PhysConstraintCommand extends AbstractCommand {
                 if (scriptEntry.hasObject("axis")) def.axis = Util.vec(scriptEntry.getObjectTag("axis"), scriptEntry.context);
                 if (scriptEntry.hasObject("normal")) def.normalAxis = Util.vec(scriptEntry.getObjectTag("normal"), scriptEntry.context);
 
+                boolean degrees = Util.bool(scriptEntry.getObjectTag("degrees"), false);
                 if (scriptEntry.hasObject("limits")) {
                     double[] lim = Util.pair(scriptEntry.getObjectTag("limits"));
                     double lo = Math.min(lim[0], lim[1]);
                     double hi = Math.max(lim[0], lim[1]);
                     if (def.kind == ConstraintDef.Kind.HINGE) {
-                        if (Util.bool(scriptEntry.getObjectTag("degrees"), false)) {
+                        if (degrees) {
                             lo = Math.toRadians(lo);
                             hi = Math.toRadians(hi);
                         }
@@ -102,6 +165,48 @@ public class PhysConstraintCommand extends AbstractCommand {
                 def.maxFriction = Util.num(scriptEntry.getObjectTag("friction"), 0);
                 def.springFrequency = Util.num(scriptEntry.getObjectTag("spring_freq"), 0);
                 def.springDamping = Util.num(scriptEntry.getObjectTag("spring_damp"), 0.5);
+
+                if (scriptEntry.hasObject("motor_state") || scriptEntry.hasObject("motor")) {
+                    String stateStr = CoreUtilities.toLowerCase(scriptEntry.getElement(scriptEntry.hasObject("motor_state") ? "motor_state" : "motor").asString());
+                    if (stateStr.equals("velocity")) def.motorState = ConstraintDef.MotorState.VELOCITY;
+                    else if (stateStr.equals("position")) def.motorState = ConstraintDef.MotorState.POSITION;
+                    else if (stateStr.equals("off")) def.motorState = ConstraintDef.MotorState.OFF;
+                    else throw new PhysException("Unknown motor state '" + stateStr + "'.");
+                }
+
+                if (scriptEntry.hasObject("motor_target")) {
+                    def.motorTarget = Util.num(scriptEntry.getObjectTag("motor_target"), 0);
+                    if (def.kind == ConstraintDef.Kind.HINGE && degrees) {
+                        def.motorTarget = Math.toRadians(def.motorTarget);
+                    }
+                }
+                else if (scriptEntry.hasObject("motor_velocity")) {
+                    def.motorTarget = Util.num(scriptEntry.getObjectTag("motor_velocity"), 0);
+                    if (def.kind == ConstraintDef.Kind.HINGE && degrees) {
+                        def.motorTarget = Math.toRadians(def.motorTarget);
+                    }
+                    if (def.motorState == ConstraintDef.MotorState.OFF) def.motorState = ConstraintDef.MotorState.VELOCITY;
+                }
+                else if (scriptEntry.hasObject("motor_angle") || scriptEntry.hasObject("motor_position")) {
+                    def.motorTarget = Util.num(scriptEntry.getObjectTag(scriptEntry.hasObject("motor_angle") ? "motor_angle" : "motor_position"), 0);
+                    if (def.kind == ConstraintDef.Kind.HINGE && degrees) {
+                        def.motorTarget = Math.toRadians(def.motorTarget);
+                    }
+                    if (def.motorState == ConstraintDef.MotorState.OFF) def.motorState = ConstraintDef.MotorState.POSITION;
+                }
+
+                if (scriptEntry.hasObject("motor_torque")) {
+                    def.motorMaxTorque = Util.num(scriptEntry.getObjectTag("motor_torque"), 0);
+                }
+                if (scriptEntry.hasObject("motor_force")) {
+                    def.motorMaxForce = Util.num(scriptEntry.getObjectTag("motor_force"), 0);
+                }
+                if (scriptEntry.hasObject("motor_spring_freq")) {
+                    def.motorSpringFrequency = Util.num(scriptEntry.getObjectTag("motor_spring_freq"), 2.0);
+                }
+                if (scriptEntry.hasObject("motor_spring_damp")) {
+                    def.motorSpringDamping = Util.num(scriptEntry.getObjectTag("motor_spring_damp"), 1.0);
+                }
 
                 w.addConstraint(def);
             }
