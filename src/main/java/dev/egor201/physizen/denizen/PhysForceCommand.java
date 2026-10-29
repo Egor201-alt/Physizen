@@ -14,7 +14,7 @@ import dev.egor201.physizen.core.PhysWorld;
 // @Name physforce
 // @Syntax physforce [force/impulse/torque/angular_impulse/velocity/angular_velocity/point_force/point_impulse] (world:<world>) body:<name> vector:<vector> (point:<location>)
 // @Required 2
-// @Maximum 6
+// @Maximum 8
 // @Short Applies physical forces, impulses, or velocity to a body.
 // @Group Physizen
 // -->
@@ -23,7 +23,7 @@ public class PhysForceCommand extends AbstractCommand {
     public PhysForceCommand() {
         setName("physforce");
         setSyntax("physforce [force/impulse/torque/angular_impulse/velocity/angular_velocity/point_force/point_impulse] (world:<world>) body:<name> vector:<vector> (point:<location>)");
-        setRequiredArguments(2, 6);
+        setRequiredArguments(2, 8);
         isProcedural = false;
     }
 

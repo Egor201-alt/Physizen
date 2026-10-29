@@ -15,9 +15,9 @@ import org.bukkit.World;
 
 // <--[command]
 // @Name physworld
-// @Syntax physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain] (id:<id>) ...
+// @Syntax physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh] (id:<id>) ...
 // @Required 1
-// @Maximum 8
+// @Maximum 12
 // @Short Controls Physizen physics worlds.
 // @Group Physizen
 // -->
@@ -25,8 +25,8 @@ public class PhysWorldCommand extends AbstractCommand {
 
     public PhysWorldCommand() {
         setName("physworld");
-        setSyntax("physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain] (id:<id>) ...");
-        setRequiredArguments(1, 8);
+        setSyntax("physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh] (id:<id>) ...");
+        setRequiredArguments(1, 12);
         isProcedural = false;
     }
 
@@ -36,7 +36,7 @@ public class PhysWorldCommand extends AbstractCommand {
             if (!scriptEntry.hasObject("action")) {
                 scriptEntry.addObject("action", arg.asElement());
             }
-            else if (!scriptEntry.hasObject("id") && arg.matchesPrefix("id", "world")) {
+            else if (!scriptEntry.hasObject("id") && (arg.matchesPrefix("id", "world") || !arg.hasPrefix())) {
                 scriptEntry.addObject("id", arg.asElement());
             }
             else {
@@ -59,11 +59,15 @@ public class PhysWorldCommand extends AbstractCommand {
         try {
             switch (act) {
                 case "create": {
-                    if (PhysEngine.get().world(id) != null) {
-                        break;
+                    PhysEngine engine = PhysEngine.get();
+                    PhysWorld w = engine.world(id);
+                    if (w == null) {
+                        int rate = scriptEntry.hasObject("rate") ? (int) Util.num(scriptEntry.getObjectTag("rate"), engine.config().tickRate) : engine.config().tickRate;
+                        w = engine.createWorld(id, rate);
                     }
-                    int rate = scriptEntry.hasObject("rate") ? (int) Util.num(scriptEntry.getObjectTag("rate"), 60) : 60;
-                    PhysWorld w = PhysEngine.get().createWorld(id, rate);
+                    else if (scriptEntry.hasObject("rate")) {
+                        w.setStepRate((int) Util.num(scriptEntry.getObjectTag("rate"), engine.config().tickRate));
+                    }
                     if (scriptEntry.hasObject("gravity")) {
                         w.setGravity(Util.vec(scriptEntry.getObjectTag("gravity"), scriptEntry.context));
                     }
@@ -146,6 +150,29 @@ public class PhysWorldCommand extends AbstractCommand {
                             Physizen.getInstance().attachWorld(id, bw);
                         }
                     }
+                    break;
+                }
+                case "refresh": {
+                    Util.world(id);
+                    double[] min;
+                    double[] max;
+                    if (scriptEntry.hasObject("min") && scriptEntry.hasObject("max")) {
+                        double[] a = Util.vec(scriptEntry.getObjectTag("min"), scriptEntry.context);
+                        double[] b = Util.vec(scriptEntry.getObjectTag("max"), scriptEntry.context);
+                        min = new double[]{Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])};
+                        max = new double[]{Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])};
+                    }
+                    else if (scriptEntry.hasObject("center")) {
+                        double[] c = Util.vec(scriptEntry.getObjectTag("center"), scriptEntry.context);
+                        double r = Util.num(scriptEntry.getObjectTag("radius"), 1.0);
+                        min = new double[]{c[0] - r, c[1] - r, c[2] - r};
+                        max = new double[]{c[0] + r, c[1] + r, c[2] + r};
+                    }
+                    else {
+                        Debug.echoError(scriptEntry, "physworld refresh needs center:<location> (radius:<n>) or min:<location> max:<location>.");
+                        return;
+                    }
+                    Physizen.getInstance().getTerrainManager().invalidateArea(id, min, max);
                     break;
                 }
                 default:

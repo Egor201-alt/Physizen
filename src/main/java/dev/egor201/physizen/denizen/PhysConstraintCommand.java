@@ -14,7 +14,7 @@ import dev.egor201.physizen.core.PhysWorld;
 // @Name physconstraint
 // @Syntax physconstraint [create/remove] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...
 // @Required 2
-// @Maximum 14
+// @Maximum 20
 // @Short Creates or removes physical constraints (joints, hinges, sliders).
 // @Group Physizen
 // -->
@@ -23,7 +23,7 @@ public class PhysConstraintCommand extends AbstractCommand {
     public PhysConstraintCommand() {
         setName("physconstraint");
         setSyntax("physconstraint [create/remove] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...");
-        setRequiredArguments(2, 14);
+        setRequiredArguments(2, 20);
         isProcedural = false;
     }
 
@@ -80,10 +80,24 @@ public class PhysConstraintCommand extends AbstractCommand {
                 if (scriptEntry.hasObject("normal")) def.normalAxis = Util.vec(scriptEntry.getObjectTag("normal"), scriptEntry.context);
 
                 if (scriptEntry.hasObject("limits")) {
-                    double[] lim = Util.vec(scriptEntry.getObjectTag("limits"), scriptEntry.context);
-                    def.limitMin = lim[0];
-                    def.limitMax = lim[1];
+                    double[] lim = Util.pair(scriptEntry.getObjectTag("limits"));
+                    double lo = Math.min(lim[0], lim[1]);
+                    double hi = Math.max(lim[0], lim[1]);
+                    if (def.kind == ConstraintDef.Kind.HINGE) {
+                        if (Util.bool(scriptEntry.getObjectTag("degrees"), false)) {
+                            lo = Math.toRadians(lo);
+                            hi = Math.toRadians(hi);
+                        }
+                        lo = Math.max(-Math.PI, Math.min(0, lo));
+                        hi = Math.min(Math.PI, Math.max(0, hi));
+                    }
+                    def.limitMin = lo;
+                    def.limitMax = hi;
                     def.limited = true;
+                }
+                if (scriptEntry.hasObject("cone_angle")) {
+                    double angle = Math.toRadians(Util.num(scriptEntry.getObjectTag("cone_angle"), 45.0));
+                    def.halfConeAngle = Math.max(0.01, Math.min(Math.PI, angle));
                 }
                 def.maxFriction = Util.num(scriptEntry.getObjectTag("friction"), 0);
                 def.springFrequency = Util.num(scriptEntry.getObjectTag("spring_freq"), 0);

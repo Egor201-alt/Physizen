@@ -43,7 +43,7 @@ import java.util.logging.Logger;
 public final class PhysWorld {
 
     public static final int GROUPS = 16;
-    private static final int LAYER_STATIC = 0;
+    static final int LAYER_STATIC = 0;
     private static final int BP_STATIC = 0;
     private static final int BP_MOVING = 1;
 
@@ -61,6 +61,7 @@ public final class PhysWorld {
     private final ConcurrentHashMap<String, PhysBody> bodies = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Integer, PhysBody> byJoltId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Object> constraints = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String[]> constraintBodies = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, FieldDef> fields = new ConcurrentHashMap<>();
     private final ReentrantReadWriteLock queryLock = new ReentrantReadWriteLock();
     private final Logger log;
@@ -257,6 +258,7 @@ public final class PhysWorld {
             bcs.setRotation(new Quat((float) def.rotation[0], (float) def.rotation[1], (float) def.rotation[2], (float) def.rotation[3]));
             EMotionType motion = def.type == MotionKind.STATIC ? EMotionType.Static : def.type == MotionKind.KINEMATIC ? EMotionType.Kinematic : EMotionType.Dynamic;
             bcs.setMotionType(motion);
+            bcs.setAllowDynamicOrKinematic(!def.internal);
             bcs.setObjectLayer(def.type == MotionKind.STATIC ? LAYER_STATIC : def.group + 1);
             bcs.setFriction((float) def.friction);
             bcs.setRestitution((float) def.restitution);
@@ -305,6 +307,12 @@ public final class PhysWorld {
             return;
         }
         pb.removed = true;
+        for (Map.Entry<String, String[]> entry : new ArrayList<>(constraintBodies.entrySet())) {
+            String[] ends = entry.getValue();
+            if (name.equals(ends[0]) || name.equals(ends[1])) {
+                removeConstraint(entry.getKey());
+            }
+        }
         post(() -> destroyBody(pb));
     }
 
@@ -354,6 +362,7 @@ public final class PhysWorld {
             throw new PhysException("A constraint needs at least one body.");
         }
         constraints.put(def.name, Boolean.TRUE);
+        constraintBodies.put(def.name, new String[]{def.bodyA, def.bodyB});
         post(() -> instantiateConstraint(def, a, b));
     }
 
@@ -449,11 +458,13 @@ public final class PhysWorld {
         }
         catch (Throwable t) {
             constraints.remove(def.name);
+            constraintBodies.remove(def.name);
             log.warning("Failed to create constraint " + def.name + ": " + t.getMessage());
         }
     }
 
     public boolean removeConstraint(String name) {
+        constraintBodies.remove(name);
         Object c = constraints.remove(name);
         if (c == null) {
             return false;
@@ -590,18 +601,74 @@ public final class PhysWorld {
                 return;
             }
             Snapshot s1 = p1.snapshot;
-            double[] point = {s1.px, s1.py, s1.pz};
-            double[] normal = {0, 1, 0};
+            Snapshot s2 = p2.snapshot;
             if (p1.def.notify) {
-                offer(new PhysEvent(PhysEvent.Kind.COLLIDE, this, p1, p2.def.internal ? null : p2, point, normal, speed));
+                boolean terrain = p2.def.internal;
+                double[] normal = contactNormal(s1, s2, terrain);
+                double[] point = terrain ? boundaryPoint(s1, new double[]{-normal[0], -normal[1], -normal[2]}) : overlapPoint(s1, s2);
+                offer(new PhysEvent(PhysEvent.Kind.COLLIDE, this, p1, terrain ? null : p2, point, normal, speed));
             }
             if (p2.def.notify && !p2.def.internal) {
-                Snapshot s2 = p2.snapshot;
-                offer(new PhysEvent(PhysEvent.Kind.COLLIDE, this, p2, p1.def.internal ? null : p1, new double[]{s2.px, s2.py, s2.pz}, normal, speed));
+                boolean terrain = p1.def.internal;
+                double[] normal = contactNormal(s2, s1, terrain);
+                double[] point = terrain ? boundaryPoint(s2, new double[]{-normal[0], -normal[1], -normal[2]}) : overlapPoint(s1, s2);
+                offer(new PhysEvent(PhysEvent.Kind.COLLIDE, this, p2, terrain ? null : p1, point, normal, speed));
             }
         }
         catch (Throwable ignored) {
         }
+    }
+
+    private static double[] unit(double x, double y, double z, double[] fallback) {
+        double len = Math.sqrt(x * x + y * y + z * z);
+        if (len < 1.0e-6) {
+            return fallback;
+        }
+        return new double[]{x / len, y / len, z / len};
+    }
+
+    private static double[] contactNormal(Snapshot self, Snapshot other, boolean otherIsTerrain) {
+        double[] up = {0, 1, 0};
+        if (otherIsTerrain) {
+            return unit(-self.vx, -self.vy, -self.vz, up);
+        }
+        return unit(self.px - other.px, self.py - other.py, self.pz - other.pz, up);
+    }
+
+    private static double[] boundaryPoint(Snapshot s, double[] dir) {
+        double cx = (s.minX + s.maxX) * 0.5;
+        double cy = (s.minY + s.maxY) * 0.5;
+        double cz = (s.minZ + s.maxZ) * 0.5;
+        double hx = (s.maxX - s.minX) * 0.5;
+        double hy = (s.maxY - s.minY) * 0.5;
+        double hz = (s.maxZ - s.minZ) * 0.5;
+        double t = Double.MAX_VALUE;
+        if (Math.abs(dir[0]) > 1.0e-6) {
+            t = Math.min(t, hx / Math.abs(dir[0]));
+        }
+        if (Math.abs(dir[1]) > 1.0e-6) {
+            t = Math.min(t, hy / Math.abs(dir[1]));
+        }
+        if (Math.abs(dir[2]) > 1.0e-6) {
+            t = Math.min(t, hz / Math.abs(dir[2]));
+        }
+        if (t == Double.MAX_VALUE) {
+            t = 0;
+        }
+        return new double[]{cx + dir[0] * t, cy + dir[1] * t, cz + dir[2] * t};
+    }
+
+    private static double[] overlapPoint(Snapshot a, Snapshot b) {
+        double x0 = Math.max(a.minX, b.minX);
+        double x1 = Math.min(a.maxX, b.maxX);
+        double y0 = Math.max(a.minY, b.minY);
+        double y1 = Math.min(a.maxY, b.maxY);
+        double z0 = Math.max(a.minZ, b.minZ);
+        double z1 = Math.min(a.maxZ, b.maxZ);
+        if (x0 <= x1 && y0 <= y1 && z0 <= z1) {
+            return new double[]{(x0 + x1) * 0.5, (y0 + y1) * 0.5, (z0 + z1) * 0.5};
+        }
+        return new double[]{(a.px + b.px) * 0.5, (a.py + b.py) * 0.5, (a.pz + b.pz) * 0.5};
     }
 
     private void handleActivation(int joltId, boolean active) {
@@ -673,7 +740,7 @@ public final class PhysWorld {
         lastStepNanos = System.nanoTime() - start;
     }
 
-    private void publish(PhysBody pb, boolean force) {
+    void publish(PhysBody pb, boolean force) {
         if (!pb.ready || pb.removed) {
             return;
         }
@@ -707,10 +774,18 @@ public final class PhysWorld {
         pb.snapshot = new Snapshot(p.xx(), p.yy(), p.zz(), q.getX(), q.getY(), q.getZ(), q.getW(),
                 v.getX(), v.getY(), v.getZ(), w.getX(), w.getY(), w.getZ(),
                 minX, minY, minZ, maxX, maxY, maxZ, active, stepCount);
-        if (p.yy() < engine.config().fallOutY && pb.def.type != MotionKind.STATIC) {
-            offer(new PhysEvent(PhysEvent.Kind.FALL_OUT, this, pb, null, new double[]{p.xx(), p.yy(), p.zz()}, null, 0));
-            if (pb.def.removeOnFallOut) {
-                removeBody(pb.name);
+        if (pb.def.type != MotionKind.STATIC) {
+            if (p.yy() < engine.config().fallOutY) {
+                if (!pb.fellOut) {
+                    pb.fellOut = true;
+                    offer(new PhysEvent(PhysEvent.Kind.FALL_OUT, this, pb, null, new double[]{p.xx(), p.yy(), p.zz()}, null, 0));
+                    if (pb.def.removeOnFallOut) {
+                        removeBody(pb.name);
+                    }
+                }
+            }
+            else {
+                pb.fellOut = false;
             }
         }
     }
@@ -828,6 +903,7 @@ public final class PhysWorld {
                 }
             }
             constraints.clear();
+            constraintBodies.clear();
         });
         drainInbox();
     }

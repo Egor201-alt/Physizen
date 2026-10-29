@@ -79,6 +79,35 @@ public final class ShapeSpec {
         return false;
     }
 
+    public ShapeSpec scaled(double factor) {
+        if (!(factor > 0)) {
+            throw new PhysException("Scale must be positive.");
+        }
+        ShapeSpec copy = new ShapeSpec();
+        copy.kind = kind;
+        copy.sizeX = sizeX * factor;
+        copy.sizeY = sizeY * factor;
+        copy.sizeZ = sizeZ * factor;
+        copy.radius = radius * factor;
+        copy.height = height * factor;
+        copy.segments = segments;
+        if (vertices != null) {
+            copy.vertices = new float[vertices.length];
+            for (int i = 0; i < vertices.length; i++) {
+                copy.vertices[i] = (float) (vertices[i] * factor);
+            }
+        }
+        copy.indices = indices == null ? null : indices.clone();
+        for (Child child : children) {
+            Child scaledChild = new Child();
+            scaledChild.shape = child.shape.scaled(factor);
+            scaledChild.offset = new double[]{child.offset[0] * factor, child.offset[1] * factor, child.offset[2] * factor};
+            scaledChild.rotation = child.rotation.clone();
+            copy.children.add(scaledChild);
+        }
+        return copy;
+    }
+
     public String describe() {
         switch (kind) {
             case BOX:

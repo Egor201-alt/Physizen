@@ -1,10 +1,16 @@
 package dev.egor201.physizen.core;
 
 import com.github.stephengold.joltjni.Body;
+import com.github.stephengold.joltjni.MassProperties;
 import com.github.stephengold.joltjni.Quat;
 import com.github.stephengold.joltjni.RVec3;
+import com.github.stephengold.joltjni.ShapeRefC;
 import com.github.stephengold.joltjni.Vec3;
 import com.github.stephengold.joltjni.enumerate.EActivation;
+import com.github.stephengold.joltjni.enumerate.EAllowedDofs;
+import com.github.stephengold.joltjni.enumerate.EMotionQuality;
+import com.github.stephengold.joltjni.enumerate.EMotionType;
+import com.github.stephengold.joltjni.readonly.ConstShape;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -20,6 +26,7 @@ public final class PhysBody {
     volatile int joltId = -1;
     volatile boolean removed = false;
     volatile boolean ready = false;
+    volatile boolean fellOut = false;
     Body body;
     float cachedMass = 0;
 
@@ -194,5 +201,156 @@ public final class PhysBody {
                 world.bodyInterface.deactivateBody(joltId);
             }
         });
+    }
+
+    public void reshape(ShapeSpec spec) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal) {
+                return;
+            }
+            if (spec.requiresNonDynamic() && def.type == MotionKind.DYNAMIC) {
+                return;
+            }
+            applyShape(spec);
+        });
+    }
+
+    public void scale(double factor) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal) {
+                return;
+            }
+            applyShape(def.shape.scaled(factor));
+        });
+    }
+
+    private void applyShape(ShapeSpec spec) {
+        ShapeRefC shape = spec.build();
+        world.bodyInterface.setShape(joltId, shape, true, EActivation.Activate);
+        def.shape = spec;
+        reapplyMass();
+        world.publish(this, true);
+    }
+
+    private void reapplyMass() {
+        if (def.type != MotionKind.DYNAMIC || body == null || body.getMotionProperties() == null) {
+            return;
+        }
+        ConstShape shape = body.getShape();
+        MassProperties properties = shape.getMassProperties();
+        if (def.mass > 0) {
+            properties.scaleToMass((float) def.mass);
+        }
+        body.getMotionProperties().setMassProperties(EAllowedDofs.All, properties);
+        float inverse = body.getMotionProperties().getInverseMass();
+        cachedMass = inverse > 0 ? 1f / inverse : 0f;
+    }
+
+    public void setMass(double mass) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal) {
+                return;
+            }
+            def.mass = Math.max(0, mass);
+            if (def.type == MotionKind.DYNAMIC) {
+                reapplyMass();
+                world.bodyInterface.activateBody(joltId);
+            }
+        });
+    }
+
+    public void setType(MotionKind kind) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal || kind == def.type) {
+                return;
+            }
+            if (kind == MotionKind.DYNAMIC && def.shape.requiresNonDynamic()) {
+                return;
+            }
+            EMotionType motion = kind == MotionKind.STATIC ? EMotionType.Static : kind == MotionKind.KINEMATIC ? EMotionType.Kinematic : EMotionType.Dynamic;
+            EActivation activation = kind == MotionKind.STATIC ? EActivation.DontActivate : EActivation.Activate;
+            world.bodyInterface.setMotionType(joltId, motion, activation);
+            def.type = kind;
+            world.bodyInterface.setObjectLayer(joltId, kind == MotionKind.STATIC ? PhysWorld.LAYER_STATIC : def.group + 1);
+            if (kind == MotionKind.DYNAMIC) {
+                reapplyMass();
+            }
+            else {
+                cachedMass = 0f;
+            }
+            world.publish(this, true);
+        });
+    }
+
+    public void setGroup(int group) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal) {
+                return;
+            }
+            def.group = group;
+            if (def.type != MotionKind.STATIC) {
+                world.bodyInterface.setObjectLayer(joltId, group + 1);
+            }
+        });
+    }
+
+    public void setSensor(boolean value) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal) {
+                return;
+            }
+            def.sensor = value;
+            body.setIsSensor(value);
+            if (def.type != MotionKind.STATIC) {
+                world.bodyInterface.activateBody(joltId);
+            }
+        });
+    }
+
+    public void setContinuous(boolean value) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal || body.getMotionProperties() == null) {
+                return;
+            }
+            def.continuous = value;
+            world.bodyInterface.setMotionQuality(joltId, value ? EMotionQuality.LinearCast : EMotionQuality.Discrete);
+        });
+    }
+
+    public void setAllowSleeping(boolean value) {
+        world.post(() -> {
+            if (!ready || body == null || def.internal) {
+                return;
+            }
+            def.allowSleeping = value;
+            body.setAllowSleeping(value);
+            if (!value && def.type != MotionKind.STATIC) {
+                world.bodyInterface.activateBody(joltId);
+            }
+        });
+    }
+
+    public void setMaxVelocities(Double linear, Double angular) {
+        world.post(() -> {
+            if (!ready || body == null || body.getMotionProperties() == null) {
+                return;
+            }
+            if (linear != null) {
+                def.maxLinearVelocity = linear;
+                body.getMotionProperties().setMaxLinearVelocity(linear.floatValue());
+            }
+            if (angular != null) {
+                def.maxAngularVelocity = angular;
+                body.getMotionProperties().setMaxAngularVelocity(angular.floatValue());
+            }
+        });
+    }
+
+    public void setNotify(boolean value) {
+        world.post(() -> def.notify = value);
+    }
+
+    public void setRemoveOnFallOut(boolean value) {
+        world.post(() -> def.removeOnFallOut = value);
     }
 }
