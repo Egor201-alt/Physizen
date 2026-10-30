@@ -63,12 +63,12 @@ public final class PhysWorld {
     private final ConcurrentLinkedQueue<Runnable> inbox = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<PhysEvent> events = new ConcurrentLinkedQueue<>();
     private final ConcurrentHashMap<String, PhysBody> bodies = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<Integer, PhysBody> byJoltId = new ConcurrentHashMap<>();
+    final ConcurrentHashMap<Integer, PhysBody> byJoltId = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, Object> constraints = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String[]> constraintBodies = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ConstraintDef> constraintDefs = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, FieldDef> fields = new ConcurrentHashMap<>();
-    private final ReentrantReadWriteLock queryLock = new ReentrantReadWriteLock();
+    final ReentrantReadWriteLock queryLock = new ReentrantReadWriteLock();
     private final Logger log;
     private volatile double[] gravity = {0, -9.81, 0};
     private volatile double timeScale = 1.0;
@@ -77,6 +77,7 @@ public final class PhysWorld {
     private volatile long stepCount = 0;
     private volatile long lastStepNanos = 0;
     private volatile int activeCount = 0;
+    private final WorldQueries queries = new WorldQueries(this);
     private volatile boolean destroyed = false;
     private double accumulator = 0;
     private int pendingSingleSteps = 0;
@@ -167,6 +168,10 @@ public final class PhysWorld {
 
     public double lastStepMillis() {
         return lastStepNanos / 1_000_000.0;
+    }
+
+    public WorldQueries queries() {
+        return queries;
     }
 
     public int activeBodyCount() {
@@ -737,29 +742,14 @@ public final class PhysWorld {
     }
 
     public RayHit rayCast(double[] from, double[] dir, double maxDistance) {
-        double len = Math.sqrt(dir[0] * dir[0] + dir[1] * dir[1] + dir[2] * dir[2]);
-        if (len < 1.0e-9 || destroyed) {
+        QueryFilter filter = new QueryFilter();
+        filter.sensors = true;
+        List<QueryHit> hits = queries.rayCast(from, dir, maxDistance, filter, false);
+        if (hits.isEmpty()) {
             return null;
         }
-        double ux = dir[0] / len;
-        double uy = dir[1] / len;
-        double uz = dir[2] / len;
-        queryLock.readLock().lock();
-        try {
-            RRayCast ray = new RRayCast(new RVec3(from[0], from[1], from[2]), new Vec3((float) (ux * maxDistance), (float) (uy * maxDistance), (float) (uz * maxDistance)));
-            RayCastResult hit = new RayCastResult();
-            if (!system.getNarrowPhaseQuery().castRay(ray, hit)) {
-                return null;
-            }
-            PhysBody pb = byJoltId.get(hit.getBodyId());
-            double fraction = hit.getFraction();
-            double[] point = {from[0] + ux * maxDistance * fraction, from[1] + uy * maxDistance * fraction, from[2] + uz * maxDistance * fraction};
-            double[] normal = {-ux, -uy, -uz};
-            return new RayHit(pb, point, normal, maxDistance * fraction, fraction);
-        }
-        finally {
-            queryLock.readLock().unlock();
-        }
+        QueryHit h = hits.get(0);
+        return new RayHit(h.body, h.point, h.normal, h.distance, h.fraction);
     }
 
     public PhysEvent pollEvent() {

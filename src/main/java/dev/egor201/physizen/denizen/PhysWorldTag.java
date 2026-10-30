@@ -15,7 +15,12 @@ import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysEngine;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.PhysWorld;
+import dev.egor201.physizen.core.QueryFilter;
+import dev.egor201.physizen.core.QueryHit;
 import dev.egor201.physizen.core.RayHit;
+import dev.egor201.physizen.core.ShapeSpec;
+
+import java.util.List;
 
 public class PhysWorldTag implements ObjectTag {
 
@@ -109,6 +114,67 @@ public class PhysWorldTag implements ObjectTag {
     @Override
     public ObjectTag getObjectAttribute(Attribute attribute) {
         return tagProcessor.getObjectAttribute(this, attribute);
+    }
+
+    private static QueryFilter filterOf(ListTag param, int index, TagContext context) {
+        QueryFilter filter = new QueryFilter();
+        if (param.size() <= index) {
+            return filter;
+        }
+        MapTag options = param.objectForms.get(index).asType(MapTag.class, context);
+        if (options == null) {
+            return filter;
+        }
+        if (options.containsKey("ignore")) {
+            for (ObjectTag o : options.getObject("ignore").asType(ListTag.class, context).objectForms) {
+                filter.ignore.add(o.toString());
+            }
+        }
+        if (options.containsKey("groups")) {
+            for (ObjectTag o : options.getObject("groups").asType(ListTag.class, context).objectForms) {
+                filter.groups.add((int) Util.num(o, 0));
+            }
+        }
+        filter.sensors = Util.bool(options.getObject("sensors"), false);
+        filter.terrain = Util.bool(options.getObject("terrain"), true);
+        filter.limit = Math.max(1, (int) Util.num(options.getObject("limit"), 64));
+        return filter;
+    }
+
+    private static double[] rotationOf(ListTag param, int index, TagContext context) {
+        if (param.size() <= index) {
+            return null;
+        }
+        MapTag options = param.objectForms.get(index).asType(MapTag.class, context);
+        if (options == null || !options.containsKey("rotation")) {
+            return null;
+        }
+        return Util.rotation(options.getObject("rotation"), context);
+    }
+
+    private static MapTag hitMap(String worldId, QueryHit hit) {
+        MapTag map = new MapTag();
+        if (hit.terrain()) {
+            map.putObject("terrain", new ElementTag(true));
+        }
+        else {
+            map.putObject("body", new PhysBodyTag(worldId, hit.body.name));
+        }
+        map.putObject("point", Util.tagVec(hit.point));
+        map.putObject("normal", Util.tagVec(hit.normal));
+        map.putObject("distance", new ElementTag(hit.distance));
+        map.putObject("fraction", new ElementTag(hit.fraction));
+        map.putObject("depth", new ElementTag(hit.depth));
+        map.putObject("inside", new ElementTag(hit.inside));
+        return map;
+    }
+
+    private static ListTag hitList(String worldId, List<QueryHit> hits) {
+        ListTag list = new ListTag();
+        for (QueryHit hit : hits) {
+            list.addObject(hitMap(worldId, hit));
+        }
+        return list;
     }
 
     private static PhysWorld need(PhysWorldTag tag) {
@@ -360,34 +426,163 @@ public class PhysWorldTag implements ObjectTag {
         });
 
         // <--[tag]
-        // @attribute <PhysWorldTag.ray_cast[<origin>|<direction>|(<max_distance>)]>
+        // @attribute <PhysWorldTag.ray_cast[<origin>|<direction>|(<max_distance>)|(<options>)]>
         // @returns MapTag
         // @description
-        // Casts a ray through this world and returns a map with the keys "hit" (boolean), and when hit "body", "point", "normal", "distance" and "fraction".
-        // The max distance defaults to 100.
+        // Casts a ray and returns the closest hit as a map with "hit" (boolean) and, when hit, "body" (or "terrain" for terrain), "point", "normal" (real surface normal), "distance", "fraction" and "inside".
+        // The max distance defaults to 100. Options is a map with: ignore (list of body names), groups (list of collision groups to hit), sensors (default false), terrain (default true).
         // @group Physizen
         // -->
         tagProcessor.registerTag(MapTag.class, ListTag.class, "ray_cast", (attribute, object, param) -> {
             if (param.size() < 2) {
-                attribute.echoError("Expected [<origin>|<direction>|(<max_distance>)].");
+                attribute.echoError("Expected [<origin>|<direction>|(<max_distance>)|(<options>)].");
                 return null;
             }
             double[] from = Util.vec(param.objectForms.get(0), attribute.context);
             double[] dir = Util.vec(param.objectForms.get(1), attribute.context);
             double max = param.size() >= 3 ? Util.num(param.objectForms.get(2), 100) : 100;
-            RayHit hit = need(object).rayCast(from, dir, max);
-            MapTag map = new MapTag();
-            map.putObject("hit", new ElementTag(hit != null));
-            if (hit != null) {
-                if (hit.body != null && !hit.body.def.internal) {
-                    map.putObject("body", new PhysBodyTag(object.id, hit.body.name));
-                }
-                map.putObject("point", Util.tagVec(hit.point));
-                map.putObject("normal", Util.tagVec(hit.normal));
-                map.putObject("distance", new ElementTag(hit.distance));
-                map.putObject("fraction", new ElementTag(hit.fraction));
-            }
+            List<QueryHit> hits = need(object).queries().rayCast(from, dir, max, filterOf(param, 3, attribute.context), false);
+            MapTag map = hits.isEmpty() ? new MapTag() : hitMap(object.id, hits.get(0));
+            map.putObject("hit", new ElementTag(!hits.isEmpty()));
             return map;
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.ray_cast_all[<origin>|<direction>|(<max_distance>)|(<options>)]>
+        // @returns ListTag(MapTag)
+        // @description
+        // Casts a ray and returns every hit along it, nearest first, each as a map with the same keys as ray_cast.
+        // Options are the same as ray_cast, plus limit (default 64).
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ListTag.class, "ray_cast_all", (attribute, object, param) -> {
+            if (param.size() < 2) {
+                attribute.echoError("Expected [<origin>|<direction>|(<max_distance>)|(<options>)].");
+                return null;
+            }
+            double[] from = Util.vec(param.objectForms.get(0), attribute.context);
+            double[] dir = Util.vec(param.objectForms.get(1), attribute.context);
+            double max = param.size() >= 3 ? Util.num(param.objectForms.get(2), 100) : 100;
+            return hitList(object.id, need(object).queries().rayCast(from, dir, max, filterOf(param, 3, attribute.context), true));
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.shape_cast[<shape>|<origin>|<direction>|(<max_distance>)|(<options>)]>
+        // @returns MapTag
+        // @description
+        // Sweeps a shape (a shape map such as [type=sphere;radius=0.5]) along a direction and returns the first thing it touches as a map with "hit", and when hit "body" (or "terrain"), "point", "normal", "distance" (how far the shape travelled), "fraction", "depth" and "inside" (true if the shape already overlapped at the start).
+        // The shape's position is its center. Options are the same as ray_cast, plus rotation (a quaternion for the shape). Mesh shapes are not allowed.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, ListTag.class, "shape_cast", (attribute, object, param) -> {
+            if (param.size() < 3) {
+                attribute.echoError("Expected [<shape>|<origin>|<direction>|(<max_distance>)|(<options>)].");
+                return null;
+            }
+            try {
+                ShapeSpec spec = Util.shape(param.objectForms.get(0), attribute.context);
+                double[] from = Util.vec(param.objectForms.get(1), attribute.context);
+                double[] dir = Util.vec(param.objectForms.get(2), attribute.context);
+                double max = param.size() >= 4 ? Util.num(param.objectForms.get(3), 100) : 100;
+                List<QueryHit> hits = need(object).queries().shapeCast(spec, from, rotationOf(param, 4, attribute.context), dir, max, filterOf(param, 4, attribute.context), false);
+                MapTag map = hits.isEmpty() ? new MapTag() : hitMap(object.id, hits.get(0));
+                map.putObject("hit", new ElementTag(!hits.isEmpty()));
+                return map;
+            }
+            catch (PhysException e) {
+                attribute.echoError(e.getMessage());
+                return null;
+            }
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.shape_cast_all[<shape>|<origin>|<direction>|(<max_distance>)|(<options>)]>
+        // @returns ListTag(MapTag)
+        // @description
+        // Like shape_cast, but returns every hit along the sweep, nearest first.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ListTag.class, "shape_cast_all", (attribute, object, param) -> {
+            if (param.size() < 3) {
+                attribute.echoError("Expected [<shape>|<origin>|<direction>|(<max_distance>)|(<options>)].");
+                return null;
+            }
+            try {
+                ShapeSpec spec = Util.shape(param.objectForms.get(0), attribute.context);
+                double[] from = Util.vec(param.objectForms.get(1), attribute.context);
+                double[] dir = Util.vec(param.objectForms.get(2), attribute.context);
+                double max = param.size() >= 4 ? Util.num(param.objectForms.get(3), 100) : 100;
+                return hitList(object.id, need(object).queries().shapeCast(spec, from, rotationOf(param, 4, attribute.context), dir, max, filterOf(param, 4, attribute.context), true));
+            }
+            catch (PhysException e) {
+                attribute.echoError(e.getMessage());
+                return null;
+            }
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.overlap[<shape>|<position>|(<options>)]>
+        // @returns ListTag(MapTag)
+        // @description
+        // Returns every body overlapping the shape placed at the position (its center), deepest first. Each entry has "body" (or "terrain"), "point" (contact point on the other body), "normal" (pointing toward the shape) and "depth" (penetration depth).
+        // Options are the same as shape_cast.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ListTag.class, "overlap", (attribute, object, param) -> {
+            if (param.size() < 2) {
+                attribute.echoError("Expected [<shape>|<position>|(<options>)].");
+                return null;
+            }
+            try {
+                ShapeSpec spec = Util.shape(param.objectForms.get(0), attribute.context);
+                double[] pos = Util.vec(param.objectForms.get(1), attribute.context);
+                return hitList(object.id, need(object).queries().overlap(spec, pos, rotationOf(param, 2, attribute.context), filterOf(param, 2, attribute.context)));
+            }
+            catch (PhysException e) {
+                attribute.echoError(e.getMessage());
+                return null;
+            }
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.overlap_sphere[<center>|<radius>|(<options>)]>
+        // @returns ListTag(MapTag)
+        // @description
+        // Shortcut for overlap with a sphere. Returns every body touching the sphere, deepest first.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ListTag.class, "overlap_sphere", (attribute, object, param) -> {
+            if (param.size() < 2) {
+                attribute.echoError("Expected [<center>|<radius>|(<options>)].");
+                return null;
+            }
+            ShapeSpec spec = new ShapeSpec();
+            spec.kind = ShapeSpec.Kind.SPHERE;
+            spec.radius = Util.num(param.objectForms.get(1), 1);
+            double[] pos = Util.vec(param.objectForms.get(0), attribute.context);
+            return hitList(object.id, need(object).queries().overlap(spec, pos, null, filterOf(param, 2, attribute.context)));
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.overlap_box[<center>|<size>|(<options>)]>
+        // @returns ListTag(MapTag)
+        // @description
+        // Shortcut for overlap with a box of the given full size. Options may include rotation.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ListTag.class, "overlap_box", (attribute, object, param) -> {
+            if (param.size() < 2) {
+                attribute.echoError("Expected [<center>|<size>|(<options>)].");
+                return null;
+            }
+            double[] size = Util.vec(param.objectForms.get(1), attribute.context);
+            ShapeSpec spec = new ShapeSpec();
+            spec.kind = ShapeSpec.Kind.BOX;
+            spec.sizeX = size[0];
+            spec.sizeY = size[1];
+            spec.sizeZ = size[2];
+            double[] pos = Util.vec(param.objectForms.get(0), attribute.context);
+            return hitList(object.id, need(object).queries().overlap(spec, pos, rotationOf(param, 2, attribute.context), filterOf(param, 2, attribute.context)));
         });
 
         // <--[tag]
