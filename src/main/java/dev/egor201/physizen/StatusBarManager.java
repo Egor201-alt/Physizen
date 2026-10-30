@@ -1,6 +1,5 @@
 package dev.egor201.physizen;
 
-import dev.egor201.physizen.core.PhysBody;
 import dev.egor201.physizen.core.PhysEngine;
 import dev.egor201.physizen.core.PhysWorld;
 import org.bukkit.Bukkit;
@@ -126,12 +125,8 @@ public class StatusBarManager implements Listener {
                     paused++;
                 }
                 bodies += w.bodyCount();
-                constraints += w.constraintNames().size();
-                for (PhysBody b : w.bodies()) {
-                    if (b.snapshot.active) {
-                        active++;
-                    }
-                }
+                constraints += w.constraintCount();
+                active += w.activeBodyCount();
                 int rate = Math.max(1, w.stepRate());
                 double budget = 1000.0 / rate;
                 double step = w.lastStepMillis();

@@ -238,12 +238,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor, org.bukkit.
         sender.sendMessage("§b--- Physizen Physics Status ---");
         sender.sendMessage("§7Worlds: §f" + engine.worlds().size() + " §7| Native: §a" + engine.nativeSource());
         for (PhysWorld w : engine.worlds()) {
-            int active = 0;
-            for (PhysBody b : w.bodies()) {
-                if (b.snapshot.active) {
-                    active++;
-                }
-            }
+            int active = w.activeBodyCount();
             sender.sendMessage(" §8- §e" + w.id + " §7(Bodies: §f" + w.bodyCount() + "§7, Active: §a" + active + "§7, Paused: §f" + w.paused() + "§7)");
         }
         return true;

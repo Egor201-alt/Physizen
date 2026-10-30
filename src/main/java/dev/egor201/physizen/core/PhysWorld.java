@@ -76,6 +76,7 @@ public final class PhysWorld {
     private volatile int stepRate;
     private volatile long stepCount = 0;
     private volatile long lastStepNanos = 0;
+    private volatile int activeCount = 0;
     private volatile boolean destroyed = false;
     private double accumulator = 0;
     private int pendingSingleSteps = 0;
@@ -166,6 +167,14 @@ public final class PhysWorld {
 
     public double lastStepMillis() {
         return lastStepNanos / 1_000_000.0;
+    }
+
+    public int activeBodyCount() {
+        return activeCount;
+    }
+
+    public int constraintCount() {
+        return constraints.size();
     }
 
     public boolean destroyed() {
@@ -924,9 +933,14 @@ public final class PhysWorld {
             queryLock.writeLock().unlock();
         }
         stepCount++;
+        int active = 0;
         for (PhysBody pb : bodies.values()) {
             publish(pb, false);
+            if (pb.snapshot.active) {
+                active++;
+            }
         }
+        activeCount = active;
         lastStepNanos = System.nanoTime() - start;
     }
 
@@ -1098,4 +1112,4 @@ public final class PhysWorld {
         });
         drainInbox();
     }
-}
+}Optimize active body counting and bossbar performance
