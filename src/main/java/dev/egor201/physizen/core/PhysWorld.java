@@ -370,6 +370,7 @@ public final class PhysWorld {
         if (a == null && b == null) {
             throw new PhysException("A constraint needs at least one body.");
         }
+        def.captureLocal(a, b);
         constraints.put(def.name, Boolean.TRUE);
         constraintBodies.put(def.name, new String[]{def.bodyA, def.bodyB});
         constraintDefs.put(def.name, def);

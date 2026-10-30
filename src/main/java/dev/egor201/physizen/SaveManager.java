@@ -52,6 +52,10 @@ public final class SaveManager {
     }
 
     public static MapTag serializeBody(String worldId, PhysBody body) {
+        return serializeBody(worldId, body, null);
+    }
+
+    public static MapTag serializeBody(String worldId, PhysBody body, Entity only) {
         MapTag map = new MapTag();
         map.putObject("name", new ElementTag(body.name));
         map.putObject("type", new ElementTag(body.def.type.name()));
@@ -84,6 +88,7 @@ public final class SaveManager {
             ListTag displaysList = new ListTag();
             for (DisplayBinder.Binding b : bindings) {
                 if (b.entity == null || !b.entity.isValid()) continue;
+                if (only != null && !b.entity.getUniqueId().equals(only.getUniqueId())) continue;
                 MapTag dispMap = new MapTag();
                 dispMap.putObject("offset", new ElementTag(b.offset.x + "," + b.offset.y + "," + b.offset.z));
                 dispMap.putObject("scale", new ElementTag(b.scale.x + "," + b.scale.y + "," + b.scale.z));
@@ -93,7 +98,10 @@ public final class SaveManager {
                 dispMap.putObject("rotation_offset", new QuaternionTag(b.rotationOffset.x, b.rotationOffset.y, b.rotationOffset.z, b.rotationOffset.w));
                 dispMap.putObject("remove_with_body", new ElementTag(b.removeWithBody));
 
-                if (b.entity instanceof BlockDisplay) {
+                if (only != null) {
+                    dispMap.putObject("display_type", new ElementTag("bound"));
+                }
+                else if (b.entity instanceof BlockDisplay) {
                     BlockDisplay bd = (BlockDisplay) b.entity;
                     dispMap.putObject("display_type", new ElementTag("block"));
                     dispMap.putObject("block_data", new ElementTag(bd.getBlock().getAsString()));
@@ -139,27 +147,7 @@ public final class SaveManager {
             boolean aIn = def.bodyA == null || included.contains(def.bodyA);
             boolean bIn = def.bodyB == null || included.contains(def.bodyB);
             if (aIn && bIn && (def.bodyA != null || def.bodyB != null)) {
-                MapTag cMap = new MapTag();
-                cMap.putObject("name", new ElementTag(def.name));
-                cMap.putObject("type", new ElementTag(def.kind.name()));
-                if (def.bodyA != null) cMap.putObject("body_a", new ElementTag(def.bodyA));
-                if (def.bodyB != null) cMap.putObject("body_b", new ElementTag(def.bodyB));
-                cMap.putObject("point_a", new ElementTag(def.pointA[0] + "," + def.pointA[1] + "," + def.pointA[2]));
-                if (def.pointB != null) cMap.putObject("point_b", new ElementTag(def.pointB[0] + "," + def.pointB[1] + "," + def.pointB[2]));
-                cMap.putObject("axis", new ElementTag(def.axis[0] + "," + def.axis[1] + "," + def.axis[2]));
-                cMap.putObject("normal", new ElementTag(def.normalAxis[0] + "," + def.normalAxis[1] + "," + def.normalAxis[2]));
-                cMap.putObject("limited", new ElementTag(def.limited));
-                cMap.putObject("limits", new ElementTag(def.limitMin + "," + def.limitMax));
-                cMap.putObject("friction", new ElementTag(def.maxFriction));
-                cMap.putObject("spring_freq", new ElementTag(def.springFrequency));
-                cMap.putObject("spring_damp", new ElementTag(def.springDamping));
-                cMap.putObject("cone_angle", new ElementTag(Math.toDegrees(def.halfConeAngle)));
-                cMap.putObject("motor_state", new ElementTag(def.motorState.name().toLowerCase()));
-                cMap.putObject("motor_target", new ElementTag(def.motorTarget));
-                cMap.putObject("motor_torque", new ElementTag(def.motorMaxTorque));
-                cMap.putObject("motor_force", new ElementTag(def.motorMaxForce));
-                cMap.putObject("motor_spring_freq", new ElementTag(def.motorSpringFrequency));
-                cMap.putObject("motor_spring_damp", new ElementTag(def.motorSpringDamping));
+                MapTag cMap = constraintToMap(def);
                 constraintsList.addObject(cMap);
             }
         }
@@ -324,15 +312,11 @@ public final class SaveManager {
             String baseName = bMap.getElement("name").asString();
             String finalName = (overrideName != null && bodiesList.size() == 1) ? overrideName : prefix + baseName;
 
-            BodyDef def = new BodyDef();
-            def.name = finalName;
-            def.shape = Util.shape(bMap.getObject("shape").asType(MapTag.class, CoreUtilities.noDebugContext), CoreUtilities.noDebugContext);
-            if (bMap.containsKey("type")) {
-                def.type = MotionKind.valueOf(bMap.getElement("type").asString().toUpperCase());
-            }
-
-            double[] savedPos = Util.vec(bMap.getObject("position"), CoreUtilities.noDebugContext);
-            double[] savedRot = Util.rotation(bMap.getObject("rotation"), CoreUtilities.noDebugContext);
+            BodyDef def = defFromMap(bMap, finalName);
+            double[] savedPos = def.position;
+            double[] savedRot = def.rotation;
+            def.linearVelocity = new double[3];
+            def.angularVelocity = new double[3];
 
             if (targetPos != null && origin != null) {
                 double dx = savedPos[0] - origin[0];
@@ -354,21 +338,6 @@ public final class SaveManager {
                 def.rotation = savedRot;
             }
 
-            def.mass = Util.num(bMap.getObject("mass"), 0);
-            def.friction = Util.num(bMap.getObject("friction"), 0.5);
-            def.restitution = Util.num(bMap.getObject("restitution"), 0.0);
-            def.linearDamping = Util.num(bMap.getObject("linear_damping"), 0.05);
-            def.angularDamping = Util.num(bMap.getObject("angular_damping"), 0.05);
-            def.gravityFactor = Util.num(bMap.getObject("gravity"), 1.0);
-            def.group = (int) Util.num(bMap.getObject("group"), 0);
-            def.sensor = Util.bool(bMap.getObject("sensor"), false);
-            def.continuous = Util.bool(bMap.getObject("continuous"), false);
-            def.allowSleeping = Util.bool(bMap.getObject("allow_sleeping"), true);
-            def.notify = Util.bool(bMap.getObject("notify"), true);
-            def.removeOnFallOut = Util.bool(bMap.getObject("remove_on_fall"), true);
-            def.tag = Util.str(bMap.getObject("tag"), "");
-            def.maxLinearVelocity = Util.num(bMap.getObject("max_velocity"), 500);
-            def.maxAngularVelocity = Util.num(bMap.getObject("max_angular_velocity"), 47.1238898);
 
             pw.createBody(def);
             createdNames.add(finalName);
@@ -398,24 +367,7 @@ public final class SaveManager {
                     }
 
                     if (spawned != null) {
-                        DisplayBinder.Binding binding = new DisplayBinder.Binding(spawned);
-                        if (dMap.containsKey("offset")) {
-                            double[] o = Util.vec(dMap.getObject("offset"), CoreUtilities.noDebugContext);
-                            binding.offset = new Vector3f((float) o[0], (float) o[1], (float) o[2]);
-                        }
-                        if (dMap.containsKey("scale")) {
-                            double[] s = Util.vec(dMap.getObject("scale"), CoreUtilities.noDebugContext);
-                            binding.scale = new Vector3f((float) s[0], (float) s[1], (float) s[2]);
-                        }
-                        if (dMap.containsKey("rotation_offset")) {
-                            double[] ro = Util.rotation(dMap.getObject("rotation_offset"), CoreUtilities.noDebugContext);
-                            binding.rotationOffset = new Quaternionf((float) ro[0], (float) ro[1], (float) ro[2], (float) ro[3]);
-                        }
-                        binding.interpolationDuration = (int) Util.num(dMap.getObject("interpolation_duration"), 3);
-                        binding.teleportDuration = (int) Util.num(dMap.getObject("teleport_duration"), 3);
-                        binding.interpolationStart = (int) Util.num(dMap.getObject("interpolation_start"), 0);
-                        binding.removeWithBody = Util.bool(dMap.getObject("remove_with_body"), true);
-
+                        DisplayBinder.Binding binding = bindingFromMap(dMap, spawned);
                         Physizen.getInstance().getDisplayBinder().bind(worldId, finalName, binding);
                         Physizen.getInstance().getPersistence().persist(spawned, worldId, finalName);
                     }
@@ -464,36 +416,130 @@ public final class SaveManager {
                     if (cMap.containsKey("axis")) def.axis = Util.vec(cMap.getObject("axis"), CoreUtilities.noDebugContext);
                 }
 
-                if (cMap.containsKey("normal")) def.normalAxis = Util.vec(cMap.getObject("normal"), CoreUtilities.noDebugContext);
-                if (cMap.containsKey("limits")) {
-                    double[] lim = Util.pair(cMap.getObject("limits"));
-                    def.limitMin = lim[0];
-                    def.limitMax = lim[1];
-                    def.limited = Util.bool(cMap.getObject("limited"), true);
-                }
-                def.maxFriction = Util.num(cMap.getObject("friction"), 0);
-                def.springFrequency = Util.num(cMap.getObject("spring_freq"), 0);
-                def.springDamping = Util.num(cMap.getObject("spring_damp"), 0.5);
-                if (cMap.containsKey("cone_angle")) {
-                    def.halfConeAngle = Math.toRadians(Util.num(cMap.getObject("cone_angle"), 45.0));
-                }
-
-                if (cMap.containsKey("motor_state")) {
-                    String stateStr = cMap.getElement("motor_state").asString().toLowerCase();
-                    if (stateStr.equals("velocity")) def.motorState = ConstraintDef.MotorState.VELOCITY;
-                    else if (stateStr.equals("position")) def.motorState = ConstraintDef.MotorState.POSITION;
-                    else def.motorState = ConstraintDef.MotorState.OFF;
-                }
-                def.motorTarget = Util.num(cMap.getObject("motor_target"), 0);
-                def.motorMaxTorque = Util.num(cMap.getObject("motor_torque"), 0);
-                def.motorMaxForce = Util.num(cMap.getObject("motor_force"), 0);
-                def.motorSpringFrequency = Util.num(cMap.getObject("motor_spring_freq"), 2.0);
-                def.motorSpringDamping = Util.num(cMap.getObject("motor_spring_damp"), 1.0);
+                applyConstraintCommon(def, cMap);
 
                 pw.addConstraint(def);
             }
         }
         return createdNames;
+    }
+
+    public static DisplayBinder.Binding bindingFromMap(MapTag dMap, Entity entity) {
+        DisplayBinder.Binding binding = new DisplayBinder.Binding(entity);
+        if (dMap.containsKey("offset")) {
+            double[] o = Util.vec(dMap.getObject("offset"), CoreUtilities.noDebugContext);
+            binding.offset = new Vector3f((float) o[0], (float) o[1], (float) o[2]);
+        }
+        if (dMap.containsKey("scale")) {
+            double[] s = Util.vec(dMap.getObject("scale"), CoreUtilities.noDebugContext);
+            binding.scale = new Vector3f((float) s[0], (float) s[1], (float) s[2]);
+        }
+        if (dMap.containsKey("rotation_offset")) {
+            double[] ro = Util.rotation(dMap.getObject("rotation_offset"), CoreUtilities.noDebugContext);
+            binding.rotationOffset = new Quaternionf((float) ro[0], (float) ro[1], (float) ro[2], (float) ro[3]);
+        }
+        binding.interpolationDuration = (int) Util.num(dMap.getObject("interpolation_duration"), 3);
+        binding.teleportDuration = (int) Util.num(dMap.getObject("teleport_duration"), 3);
+        binding.interpolationStart = (int) Util.num(dMap.getObject("interpolation_start"), 0);
+        binding.removeWithBody = Util.bool(dMap.getObject("remove_with_body"), true);
+        return binding;
+    }
+
+    private static String join3(double[] v) {
+        return v[0] + "," + v[1] + "," + v[2];
+    }
+
+    public static MapTag constraintToMap(ConstraintDef def) {
+        MapTag cMap = new MapTag();
+        cMap.putObject("name", new ElementTag(def.name));
+        cMap.putObject("type", new ElementTag(def.kind.name()));
+        if (def.bodyA != null) cMap.putObject("body_a", new ElementTag(def.bodyA));
+        if (def.bodyB != null) cMap.putObject("body_b", new ElementTag(def.bodyB));
+        cMap.putObject("point_a", new ElementTag(join3(def.pointA)));
+        if (def.pointB != null) cMap.putObject("point_b", new ElementTag(join3(def.pointB)));
+        cMap.putObject("axis", new ElementTag(join3(def.axis)));
+        cMap.putObject("normal", new ElementTag(join3(def.normalAxis)));
+        cMap.putObject("limited", new ElementTag(def.limited));
+        cMap.putObject("limits", new ElementTag(def.limitMin + "," + def.limitMax));
+        cMap.putObject("friction", new ElementTag(def.maxFriction));
+        cMap.putObject("spring_freq", new ElementTag(def.springFrequency));
+        cMap.putObject("spring_damp", new ElementTag(def.springDamping));
+        cMap.putObject("cone_angle", new ElementTag(Math.toDegrees(def.halfConeAngle)));
+        cMap.putObject("motor_state", new ElementTag(def.motorState.name().toLowerCase()));
+        cMap.putObject("motor_target", new ElementTag(def.motorTarget));
+        cMap.putObject("motor_torque", new ElementTag(def.motorMaxTorque));
+        cMap.putObject("motor_force", new ElementTag(def.motorMaxForce));
+        cMap.putObject("motor_spring_freq", new ElementTag(def.motorSpringFrequency));
+        cMap.putObject("motor_spring_damp", new ElementTag(def.motorSpringDamping));
+        if (def.localA != null) {
+            cMap.putObject("local_a", new ElementTag(join3(def.localA)));
+            cMap.putObject("local_b", new ElementTag(join3(def.localB)));
+            cMap.putObject("local_axis", new ElementTag(join3(def.localAxis)));
+            cMap.putObject("local_normal", new ElementTag(join3(def.localNormal)));
+        }
+        return cMap;
+    }
+
+    public static List<MapTag> constraintsOf(PhysWorld pw, String bodyName) {
+        List<MapTag> list = new ArrayList<>();
+        for (String cName : pw.constraintNames()) {
+            ConstraintDef def = pw.constraintDef(cName);
+            if (def != null && (bodyName.equals(def.bodyA) || bodyName.equals(def.bodyB))) {
+                list.add(constraintToMap(def));
+            }
+        }
+        return list;
+    }
+
+    private static void applyConstraintCommon(ConstraintDef def, MapTag cMap) {
+        if (cMap.containsKey("normal")) def.normalAxis = Util.vec(cMap.getObject("normal"), CoreUtilities.noDebugContext);
+        if (cMap.containsKey("limits")) {
+            double[] lim = Util.pair(cMap.getObject("limits"));
+            def.limitMin = lim[0];
+            def.limitMax = lim[1];
+            def.limited = Util.bool(cMap.getObject("limited"), true);
+        }
+        def.maxFriction = Util.num(cMap.getObject("friction"), 0);
+        def.springFrequency = Util.num(cMap.getObject("spring_freq"), 0);
+        def.springDamping = Util.num(cMap.getObject("spring_damp"), 0.5);
+        if (cMap.containsKey("cone_angle")) {
+            def.halfConeAngle = Math.toRadians(Util.num(cMap.getObject("cone_angle"), 45.0));
+        }
+
+        if (cMap.containsKey("motor_state")) {
+            String stateStr = cMap.getElement("motor_state").asString().toLowerCase();
+            if (stateStr.equals("velocity")) def.motorState = ConstraintDef.MotorState.VELOCITY;
+            else if (stateStr.equals("position")) def.motorState = ConstraintDef.MotorState.POSITION;
+            else def.motorState = ConstraintDef.MotorState.OFF;
+        }
+        def.motorTarget = Util.num(cMap.getObject("motor_target"), 0);
+        def.motorMaxTorque = Util.num(cMap.getObject("motor_torque"), 0);
+        def.motorMaxForce = Util.num(cMap.getObject("motor_force"), 0);
+        def.motorSpringFrequency = Util.num(cMap.getObject("motor_spring_freq"), 2.0);
+        def.motorSpringDamping = Util.num(cMap.getObject("motor_spring_damp"), 1.0);
+    }
+
+    public static ConstraintDef constraintFromBlob(PhysWorld pw, MapTag cMap) {
+        ConstraintDef def = new ConstraintDef();
+        def.name = cMap.getElement("name").asString();
+        def.kind = ConstraintDef.Kind.valueOf(cMap.getElement("type").asString().toUpperCase());
+        if (cMap.containsKey("body_a")) def.bodyA = cMap.getElement("body_a").asString();
+        if (cMap.containsKey("body_b")) def.bodyB = cMap.getElement("body_b").asString();
+        applyConstraintCommon(def, cMap);
+        PhysBody a = def.bodyA == null ? null : pw.body(def.bodyA);
+        PhysBody b = def.bodyB == null ? null : pw.body(def.bodyB);
+        if (cMap.containsKey("local_a")) {
+            def.pointA = ConstraintDef.toWorld(a, Util.vec(cMap.getObject("local_a"), CoreUtilities.noDebugContext));
+            def.pointB = ConstraintDef.toWorld(b, Util.vec(cMap.getObject("local_b"), CoreUtilities.noDebugContext));
+            def.axis = ConstraintDef.rotate(a, Util.vec(cMap.getObject("local_axis"), CoreUtilities.noDebugContext), false);
+            def.normalAxis = ConstraintDef.rotate(a, Util.vec(cMap.getObject("local_normal"), CoreUtilities.noDebugContext), false);
+        }
+        else {
+            def.pointA = Util.vec(cMap.getObject("point_a"), CoreUtilities.noDebugContext);
+            def.pointB = cMap.containsKey("point_b") ? Util.vec(cMap.getObject("point_b"), CoreUtilities.noDebugContext) : def.pointA;
+            if (cMap.containsKey("axis")) def.axis = Util.vec(cMap.getObject("axis"), CoreUtilities.noDebugContext);
+        }
+        return def;
     }
 
     private static Object unpack(ObjectTag tag) {

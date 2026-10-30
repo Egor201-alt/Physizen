@@ -11,7 +11,7 @@ commands:
   physizen:
     description: Shows physics worlds status and diagnostics.
     permission: physizen.admin
-    usage: /physizen
+    usage: /physizen [status]
 
 permissions:
   physizen.admin:

@@ -39,4 +39,52 @@ public final class ConstraintDef {
     public double motorMaxForce = 0;
     public double motorSpringFrequency = 2.0;
     public double motorSpringDamping = 1.0;
+
+    public double[] localA;
+    public double[] localB;
+    public double[] localAxis;
+    public double[] localNormal;
+
+    public void captureLocal(PhysBody a, PhysBody b) {
+        localA = toLocal(a, pointA);
+        localB = toLocal(b, pointB == null ? pointA : pointB);
+        localAxis = rotate(a, axis, true);
+        localNormal = rotate(a, normalAxis, true);
+    }
+
+    public static double[] toLocal(PhysBody body, double[] p) {
+        if (body == null) {
+            return p.clone();
+        }
+        Snapshot s = body.snapshot;
+        return rotate(body, new double[]{p[0] - s.px, p[1] - s.py, p[2] - s.pz}, true);
+    }
+
+    public static double[] toWorld(PhysBody body, double[] p) {
+        if (body == null) {
+            return p.clone();
+        }
+        Snapshot s = body.snapshot;
+        double[] r = rotate(body, p, false);
+        return new double[]{r[0] + s.px, r[1] + s.py, r[2] + s.pz};
+    }
+
+    public static double[] rotate(PhysBody body, double[] v, boolean inverse) {
+        if (body == null) {
+            return v.clone();
+        }
+        Snapshot s = body.snapshot;
+        double qx = inverse ? -s.qx : s.qx;
+        double qy = inverse ? -s.qy : s.qy;
+        double qz = inverse ? -s.qz : s.qz;
+        double qw = s.qw;
+        double tx = 2 * (qy * v[2] - qz * v[1]);
+        double ty = 2 * (qz * v[0] - qx * v[2]);
+        double tz = 2 * (qx * v[1] - qy * v[0]);
+        return new double[]{
+                v[0] + qw * tx + (qy * tz - qz * ty),
+                v[1] + qw * ty + (qz * tx - qx * tz),
+                v[2] + qw * tz + (qx * ty - qy * tx)
+        };
+    }
 }

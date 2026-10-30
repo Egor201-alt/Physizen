@@ -30,13 +30,14 @@ import java.lang.reflect.Field;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-public class Physizen extends JavaPlugin implements CommandExecutor {
+public class Physizen extends JavaPlugin implements CommandExecutor, org.bukkit.command.TabCompleter {
 
     private static Physizen instance;
     private DisplayBinder displayBinder;
     private TerrainManager terrainManager;
     private HitboxManager hitboxManager;
     private PersistenceManager persistence;
+    private StatusBarManager statusBars;
     private final Map<String, World> worldAttachments = new ConcurrentHashMap<>();
     private long currentTick = 0;
 
@@ -124,6 +125,8 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         getServer().getPluginManager().registerEvents(hitboxManager, this);
         Util.init(this);
         persistence = new PersistenceManager(this, getConfig());
+        statusBars = new StatusBarManager(this);
+        getServer().getPluginManager().registerEvents(statusBars, this);
         if (persistence.enabled()) {
             getServer().getPluginManager().registerEvents(persistence, this);
         }
@@ -160,6 +163,7 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
         if (getCommand("physizen") != null) {
             getCommand("physizen").setExecutor(this);
+            getCommand("physizen").setTabCompleter(this);
         }
 
         Bukkit.getScheduler().runTaskTimer(this, () -> {
@@ -185,6 +189,9 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
 
     @Override
     public void onDisable() {
+        if (statusBars != null) {
+            statusBars.clear();
+        }
         if (persistence != null && PhysEngine.get() != null) {
             persistence.refreshAll();
         }
@@ -198,6 +205,14 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
     }
 
     @Override
+    public java.util.List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1 && sender.hasPermission("physizen.admin")) {
+            return java.util.Collections.singletonList("status");
+        }
+        return java.util.Collections.emptyList();
+    }
+
+    @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (!sender.hasPermission("physizen.admin")) {
             sender.sendMessage("§cNo permission.");
@@ -207,6 +222,16 @@ public class Physizen extends JavaPlugin implements CommandExecutor {
         PhysEngine engine = PhysEngine.get();
         if (engine == null) {
             sender.sendMessage("§cPhysEngine is not running.");
+            return true;
+        }
+
+        if (args.length > 0 && args[0].equalsIgnoreCase("status")) {
+            if (!(sender instanceof org.bukkit.entity.Player)) {
+                sender.sendMessage("§cOnly players can use the status bar.");
+                return true;
+            }
+            boolean shown = statusBars.toggle((org.bukkit.entity.Player) sender);
+            sender.sendMessage(shown ? "§bPhysizen §7status bar §aenabled§7. Run §f/physizen status §7again to hide it." : "§bPhysizen §7status bar §chidden§7.");
             return true;
         }
 

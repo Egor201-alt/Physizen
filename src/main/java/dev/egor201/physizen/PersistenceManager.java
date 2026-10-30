@@ -1,8 +1,9 @@
 package dev.egor201.physizen;
 
+import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
-import com.denizenscript.denizencore.objects.core.QuaternionTag;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import dev.egor201.physizen.core.BodyDef;
 import dev.egor201.physizen.core.PhysBody;
@@ -22,12 +23,13 @@ import org.bukkit.event.world.EntitiesLoadEvent;
 import org.bukkit.event.world.EntitiesUnloadEvent;
 import org.bukkit.persistence.PersistentDataType;
 import org.joml.Quaternionf;
-import dev.egor201.physizen.denizen.Util;
-import org.joml.Vector3f;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -40,6 +42,7 @@ public class PersistenceManager implements Listener {
     private final boolean unloadBodies;
     private final long refreshTicks;
     private final List<Entity> pending = new ArrayList<>();
+    private final Map<String, List<MapTag>> pendingConstraints = new HashMap<>();
 
     private static final class Ref {
 
@@ -67,6 +70,32 @@ public class PersistenceManager implements Listener {
         return enabled;
     }
 
+    public int pendingCount() {
+        int n = pending.size();
+        for (List<MapTag> list : pendingConstraints.values()) {
+            n += list.size();
+        }
+        return n;
+    }
+
+    private static String nameOf(MapTag map, String field) {
+        return map.containsKey(field) ? map.getElement(field).asString() : null;
+    }
+
+    private static boolean touches(MapTag c, String bodyName) {
+        return bodyName.equals(nameOf(c, "body_a")) || bodyName.equals(nameOf(c, "body_b"));
+    }
+
+    public void dropPending(String worldId, String bodyName) {
+        List<MapTag> list = pendingConstraints.get(worldId);
+        if (list != null) {
+            list.removeIf(c -> touches(c, bodyName));
+            if (list.isEmpty()) {
+                pendingConstraints.remove(worldId);
+            }
+        }
+    }
+
     public void persist(Entity entity, String worldId, String bodyName) {
         if (!enabled || entity == null || !entity.isValid()) {
             return;
@@ -80,27 +109,29 @@ public class PersistenceManager implements Listener {
         if (body == null || body.isRemoved()) {
             return;
         }
-        DisplayBinder.Binding binding = plugin.getDisplayBinder().bindingOf(worldId, bodyName, entity.getUniqueId());
-        if (binding == null) {
+        if (plugin.getDisplayBinder().getBindings(worldId, bodyName).stream().noneMatch(b -> b.entity != null && b.entity.getUniqueId().equals(entity.getUniqueId()))) {
             return;
         }
         try {
-            MapTag full = SaveManager.serializeBody(worldId, body);
-            MapTag blob = new MapTag();
-            for (String k : full.keys()) {
-                if (!k.equals("displays")) {
-                    blob.putObject(k, full.getObject(k));
+            MapTag root = new MapTag();
+            root.putObject("world", new ElementTag(worldId));
+            ListTag bodies = new ListTag();
+            bodies.addObject(SaveManager.serializeBody(worldId, body, entity));
+            root.putObject("bodies", bodies);
+            ListTag constraints = new ListTag();
+            for (MapTag c : SaveManager.constraintsOf(world, bodyName)) {
+                constraints.addObject(c);
+            }
+            List<MapTag> waiting = pendingConstraints.get(worldId);
+            if (waiting != null) {
+                for (MapTag c : waiting) {
+                    if (touches(c, bodyName)) {
+                        constraints.addObject(c);
+                    }
                 }
             }
-            blob.putObject("world", new ElementTag(worldId));
-            blob.putObject("offset", new ElementTag(binding.offset.x + "," + binding.offset.y + "," + binding.offset.z));
-            blob.putObject("scale", new ElementTag(binding.scale.x + "," + binding.scale.y + "," + binding.scale.z));
-            blob.putObject("rotation_offset", new QuaternionTag(binding.rotationOffset.x, binding.rotationOffset.y, binding.rotationOffset.z, binding.rotationOffset.w));
-            blob.putObject("interpolation_duration", new ElementTag(binding.interpolationDuration));
-            blob.putObject("teleport_duration", new ElementTag(binding.teleportDuration));
-            blob.putObject("interpolation_start", new ElementTag(binding.interpolationStart));
-            blob.putObject("remove_with_body", new ElementTag(binding.removeWithBody));
-            entity.getPersistentDataContainer().set(key, PersistentDataType.BYTE_ARRAY, SaveManager.toBlob(blob));
+            root.putObject("constraints", constraints);
+            entity.getPersistentDataContainer().set(key, PersistentDataType.BYTE_ARRAY, SaveManager.toBlob(root));
         }
         catch (Exception e) {
             plugin.getLogger().warning("Failed to store physics data: " + e.getMessage());
@@ -125,10 +156,17 @@ public class PersistenceManager implements Listener {
         if (!enabled) {
             return;
         }
-        if (currentTick % 20 == 0 && !pending.isEmpty()) {
-            for (Entity e : new ArrayList<>(pending)) {
-                if (!e.isValid() || restore(e)) {
-                    pending.remove(e);
+        if (currentTick % 20 == 0) {
+            if (!pending.isEmpty()) {
+                for (Entity e : new ArrayList<>(pending)) {
+                    if (!e.isValid() || restore(e)) {
+                        pending.remove(e);
+                    }
+                }
+            }
+            if (!pendingConstraints.isEmpty()) {
+                for (String worldId : new ArrayList<>(pendingConstraints.keySet())) {
+                    resolveConstraints(worldId);
                 }
             }
         }
@@ -191,6 +229,63 @@ public class PersistenceManager implements Listener {
         }
     }
 
+    private boolean bodiesExist(PhysWorld world, MapTag c) {
+        String a = nameOf(c, "body_a");
+        String b = nameOf(c, "body_b");
+        return (a == null || world.body(a) != null) && (b == null || world.body(b) != null);
+    }
+
+    private void applyConstraint(PhysWorld world, MapTag c) {
+        try {
+            world.addConstraint(SaveManager.constraintFromBlob(world, c));
+        }
+        catch (PhysException e) {
+            plugin.getLogger().warning("Could not restore constraint " + nameOf(c, "name") + ": " + e.getMessage());
+        }
+    }
+
+    private void offerConstraint(PhysWorld world, MapTag c) {
+        String name = nameOf(c, "name");
+        if (name == null || world.constraintDef(name) != null) {
+            return;
+        }
+        if (bodiesExist(world, c)) {
+            applyConstraint(world, c);
+            return;
+        }
+        List<MapTag> list = pendingConstraints.computeIfAbsent(world.id, k -> new ArrayList<>());
+        for (MapTag other : list) {
+            if (name.equals(nameOf(other, "name"))) {
+                return;
+            }
+        }
+        list.add(c);
+    }
+
+    private void resolveConstraints(String worldId) {
+        List<MapTag> list = pendingConstraints.get(worldId);
+        PhysEngine engine = PhysEngine.get();
+        PhysWorld world = engine == null ? null : engine.world(worldId);
+        if (list == null || world == null) {
+            return;
+        }
+        Iterator<MapTag> it = list.iterator();
+        while (it.hasNext()) {
+            MapTag c = it.next();
+            String name = nameOf(c, "name");
+            if (name != null && world.constraintDef(name) != null) {
+                it.remove();
+            }
+            else if (bodiesExist(world, c)) {
+                it.remove();
+                applyConstraint(world, c);
+            }
+        }
+        if (list.isEmpty()) {
+            pendingConstraints.remove(worldId);
+        }
+    }
+
     private boolean restore(Entity entity) {
         byte[] data = entity.getPersistentDataContainer().get(key, PersistentDataType.BYTE_ARRAY);
         if (data == null) {
@@ -200,13 +295,17 @@ public class PersistenceManager implements Listener {
         if (engine == null) {
             return true;
         }
-        MapTag blob;
+        MapTag root;
+        MapTag bMap;
+        MapTag dMap;
         String worldId;
         String bodyName;
         try {
-            blob = SaveManager.fromBlob(data);
-            worldId = blob.getElement("world").asString();
-            bodyName = blob.getElement("name").asString();
+            root = SaveManager.fromBlob(data);
+            worldId = root.getElement("world").asString();
+            bMap = root.getObject("bodies").asType(ListTag.class, CoreUtilities.noDebugContext).objectForms.get(0).asType(MapTag.class, CoreUtilities.noDebugContext);
+            bodyName = bMap.getElement("name").asString();
+            dMap = bMap.getObject("displays").asType(ListTag.class, CoreUtilities.noDebugContext).objectForms.get(0).asType(MapTag.class, CoreUtilities.noDebugContext);
         }
         catch (Exception e) {
             plugin.getLogger().warning("Corrupted physics data on entity " + entity.getUniqueId() + ": " + e.getMessage());
@@ -234,19 +333,9 @@ public class PersistenceManager implements Listener {
         if (plugin.getWorld(worldId) == null) {
             plugin.attachWorld(worldId, entity.getWorld());
         }
-        DisplayBinder.Binding binding = new DisplayBinder.Binding(entity);
-        double[] off = Util.vec(blob.getObject("offset"), CoreUtilities.noDebugContext);
-        double[] scl = Util.vec(blob.getObject("scale"), CoreUtilities.noDebugContext);
-        double[] rot = Util.rotation(blob.getObject("rotation_offset"), CoreUtilities.noDebugContext);
-        binding.offset = new Vector3f((float) off[0], (float) off[1], (float) off[2]);
-        binding.scale = new Vector3f((float) scl[0], (float) scl[1], (float) scl[2]);
-        binding.rotationOffset = new Quaternionf((float) rot[0], (float) rot[1], (float) rot[2], (float) rot[3]);
-        binding.interpolationDuration = (int) Util.num(blob.getObject("interpolation_duration"), 3);
-        binding.teleportDuration = (int) Util.num(blob.getObject("teleport_duration"), 3);
-        binding.interpolationStart = (int) Util.num(blob.getObject("interpolation_start"), 0);
-        binding.removeWithBody = Util.bool(blob.getObject("remove_with_body"), true);
+        DisplayBinder.Binding binding = SaveManager.bindingFromMap(dMap, entity);
         if (world.body(bodyName) == null) {
-            BodyDef def = SaveManager.defFromMap(blob, bodyName);
+            BodyDef def = SaveManager.defFromMap(bMap, bodyName);
             Location loc = entity.getLocation();
             if (entity instanceof Display) {
                 Quaternionf total = new Quaternionf(((Display) entity).getTransformation().getLeftRotation());
@@ -267,6 +356,15 @@ public class PersistenceManager implements Listener {
             }
         }
         binder.bind(worldId, bodyName, binding);
+        if (root.containsKey("constraints")) {
+            for (ObjectTag obj : root.getObject("constraints").asType(ListTag.class, CoreUtilities.noDebugContext).objectForms) {
+                MapTag c = obj.asType(MapTag.class, CoreUtilities.noDebugContext);
+                if (c != null) {
+                    offerConstraint(world, c);
+                }
+            }
+        }
+        resolveConstraints(worldId);
         return true;
     }
 }

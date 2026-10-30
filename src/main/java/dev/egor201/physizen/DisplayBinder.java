@@ -74,6 +74,21 @@ public class DisplayBinder {
         void visit(String worldId, String bodyName, Binding binding);
     }
 
+    private static void dropPending(String worldId, String bodyName) {
+        PersistenceManager persistence = Physizen.getInstance().getPersistence();
+        if (persistence != null) {
+            persistence.dropPending(worldId, bodyName);
+        }
+    }
+
+    public int totalBindings() {
+        int total = 0;
+        for (List<Binding> list : bindings.values()) {
+            total += list.size();
+        }
+        return total;
+    }
+
     private static void forget(Entity entity) {
         PersistenceManager persistence = Physizen.getInstance().getPersistence();
         if (persistence != null) {
@@ -153,6 +168,7 @@ public class DisplayBinder {
         BodyKey key = new BodyKey(worldId, bodyName);
         List<Binding> removed = bindings.remove(key);
         lastSteps.remove(key);
+        dropPending(worldId, bodyName);
         if (removed != null) {
             for (Binding b : removed) {
                 if (b.removeWithBody && b.entity.isValid()) {
@@ -244,6 +260,7 @@ public class DisplayBinder {
                         }
                     }
                 }
+                dropPending(key.worldId, key.bodyName);
                 it.remove();
                 lastSteps.remove(key);
                 continue;
