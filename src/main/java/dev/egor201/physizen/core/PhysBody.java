@@ -59,6 +59,11 @@ public final class PhysBody {
     }
 
     public void teleport(double[] pos, double[] rot) {
+        Guard.position(pos, "pos");
+        if (rot != null) {
+            Guard.quat(rot, "rotation");
+            Guard.normalizeQuat(rot);
+        }
         world.post(() -> {
             if (!ready) {
                 return;
@@ -74,6 +79,12 @@ public final class PhysBody {
     }
 
     public void moveKinematic(double[] pos, double[] rot, double seconds) {
+        Guard.position(pos, "pos");
+        if (rot != null) {
+            Guard.quat(rot, "rotation");
+            Guard.normalizeQuat(rot);
+        }
+        Guard.number(seconds, "seconds");
         world.post(() -> {
             if (!ready) {
                 return;
@@ -85,6 +96,7 @@ public final class PhysBody {
     }
 
     public void setLinearVelocity(double[] v) {
+        Guard.vec(v, "v");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.setLinearVelocity(joltId, new Vec3((float) v[0], (float) v[1], (float) v[2]));
@@ -94,6 +106,7 @@ public final class PhysBody {
     }
 
     public void setAngularVelocity(double[] v) {
+        Guard.vec(v, "v");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.setAngularVelocity(joltId, new Vec3((float) v[0], (float) v[1], (float) v[2]));
@@ -103,6 +116,7 @@ public final class PhysBody {
     }
 
     public void addForce(double[] f) {
+        Guard.vec(f, "f");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.addForce(joltId, new Vec3((float) f[0], (float) f[1], (float) f[2]));
@@ -111,6 +125,8 @@ public final class PhysBody {
     }
 
     public void addForceAt(double[] f, double[] point) {
+        Guard.vec(f, "f");
+        Guard.position(point, "point");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.addForce(joltId, new Vec3((float) f[0], (float) f[1], (float) f[2]), new RVec3(point[0], point[1], point[2]));
@@ -119,6 +135,7 @@ public final class PhysBody {
     }
 
     public void addImpulse(double[] i) {
+        Guard.vec(i, "i");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.addImpulse(joltId, new Vec3((float) i[0], (float) i[1], (float) i[2]));
@@ -127,6 +144,8 @@ public final class PhysBody {
     }
 
     public void addImpulseAt(double[] i, double[] point) {
+        Guard.vec(i, "i");
+        Guard.position(point, "point");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.addImpulse(joltId, new Vec3((float) i[0], (float) i[1], (float) i[2]), new RVec3(point[0], point[1], point[2]));
@@ -135,6 +154,7 @@ public final class PhysBody {
     }
 
     public void addTorque(double[] t) {
+        Guard.vec(t, "t");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.addTorque(joltId, new Vec3((float) t[0], (float) t[1], (float) t[2]));
@@ -143,6 +163,7 @@ public final class PhysBody {
     }
 
     public void addAngularImpulse(double[] t) {
+        Guard.vec(t, "t");
         world.post(() -> {
             if (ready) {
                 world.bodyInterface.addAngularImpulse(joltId, new Vec3((float) t[0], (float) t[1], (float) t[2]));
@@ -151,6 +172,7 @@ public final class PhysBody {
     }
 
     public void setFriction(double value) {
+        Guard.number(value, "value");
         world.post(() -> {
             if (ready) {
                 def.friction = value;
@@ -160,6 +182,7 @@ public final class PhysBody {
     }
 
     public void setRestitution(double value) {
+        Guard.number(value, "value");
         world.post(() -> {
             if (ready) {
                 def.restitution = value;
@@ -169,6 +192,7 @@ public final class PhysBody {
     }
 
     public void setGravityFactor(double value) {
+        Guard.number(value, "value");
         world.post(() -> {
             if (ready) {
                 def.gravityFactor = value;
@@ -221,6 +245,7 @@ public final class PhysBody {
     }
 
     public void scale(double factor) {
+        Guard.number(factor, "factor");
         world.post(() -> {
             if (!ready || body == null || def.internal) {
                 return;
@@ -252,6 +277,7 @@ public final class PhysBody {
     }
 
     public void setMass(double mass) {
+        Guard.number(mass, "mass");
         world.post(() -> {
             if (!ready || body == null || def.internal) {
                 return;

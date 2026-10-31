@@ -77,6 +77,7 @@ public final class PhysWorld {
     private volatile long stepCount = 0;
     private volatile long lastStepNanos = 0;
     private volatile int activeCount = 0;
+    private int stepFailures = 0;
     private final WorldQueries queries = new WorldQueries(this);
     private volatile boolean destroyed = false;
     private double accumulator = 0;
@@ -134,6 +135,7 @@ public final class PhysWorld {
     }
 
     public void setGravity(double[] g) {
+        Guard.vec(g, "g");
         gravity = g.clone();
         post(() -> system.setGravity(new Vec3((float) g[0], (float) g[1], (float) g[2])));
     }
@@ -143,6 +145,7 @@ public final class PhysWorld {
     }
 
     public void setTimeScale(double scale) {
+        Guard.number(scale, "scale");
         timeScale = Math.max(0, scale);
     }
 
@@ -260,6 +263,10 @@ public final class PhysWorld {
         if (def.group < 0 || def.group >= GROUPS) {
             throw new PhysException("Group must be between 0 and " + (GROUPS - 1) + ".");
         }
+        Guard.validateDef(def);
+        if (!def.internal && bodies.size() >= engine.config().maxBodiesPerWorld) {
+            throw new PhysException("World " + id + " reached the body limit (" + engine.config().maxBodiesPerWorld + ").");
+        }
         PhysBody body = new PhysBody(this, def);
         if (bodies.putIfAbsent(def.name, body) != null) {
             throw new PhysException("Body " + def.name + " already exists in world " + id + ".");
@@ -340,11 +347,16 @@ public final class PhysWorld {
     }
 
     private void destroyBody(PhysBody pb) {
-        if (pb.joltId >= 0 && pb.ready) {
-            pb.ready = false;
-            byJoltId.remove(pb.joltId);
-            bodyInterface.removeBody(pb.joltId);
-            bodyInterface.destroyBody(pb.joltId);
+        try {
+            if (pb.joltId >= 0 && pb.ready) {
+                pb.ready = false;
+                byJoltId.remove(pb.joltId);
+                bodyInterface.removeBody(pb.joltId);
+                bodyInterface.destroyBody(pb.joltId);
+            }
+        }
+        catch (Throwable t) {
+            log.warning("Failed to destroy body " + pb.name + ": " + t.getMessage());
         }
         pb.body = null;
     }
@@ -384,6 +396,10 @@ public final class PhysWorld {
         if (a == null && b == null) {
             throw new PhysException("A constraint needs at least one body.");
         }
+        Guard.validateConstraint(def);
+        if (constraints.size() >= engine.config().maxConstraintsPerWorld) {
+            throw new PhysException("World " + id + " reached the constraint limit (" + engine.config().maxConstraintsPerWorld + ").");
+        }
         def.captureLocal(a, b);
         constraints.put(def.name, Boolean.TRUE);
         constraintBodies.put(def.name, new String[]{def.bodyA, def.bodyB});
@@ -392,6 +408,13 @@ public final class PhysWorld {
     }
 
     private void instantiateConstraint(ConstraintDef def, PhysBody a, PhysBody b) {
+        if ((a != null && (a.removed || !a.ready || a.body == null)) || (b != null && (b.removed || !b.ready || b.body == null))) {
+            constraints.remove(def.name);
+            constraintBodies.remove(def.name);
+            constraintDefs.remove(def.name);
+            log.warning("Constraint " + def.name + " was dropped because one of its bodies is gone.");
+            return;
+        }
         try {
             Body body1 = a != null && a.body != null ? a.body : Body.sFixedToWorld();
             Body body2 = b != null && b.body != null ? b.body : Body.sFixedToWorld();
@@ -667,21 +690,32 @@ public final class PhysWorld {
     }
 
     public boolean removeConstraint(String name) {
-        constraintBodies.remove(name);
-        constraintDefs.remove(name);
-        Object c = constraints.remove(name);
-        if (c == null) {
+        if (!constraints.containsKey(name)) {
             return false;
         }
-        post(() -> {
-            if (c instanceof Constraint) {
-                system.removeConstraint((Constraint) c);
-            }
-        });
+        post(() -> dropConstraint(name));
         return true;
     }
 
+    private void dropConstraint(String name) {
+        constraintBodies.remove(name);
+        constraintDefs.remove(name);
+        Object c = constraints.remove(name);
+        if (c instanceof Constraint) {
+            try {
+                system.removeConstraint((Constraint) c);
+            }
+            catch (Throwable t) {
+                log.warning("Failed to remove constraint " + name + ": " + t.getMessage());
+            }
+        }
+    }
+
     public void explosion(double[] center, double radius, double impulse, double upward) {
+        Guard.position(center, "center");
+        Guard.number(radius, "radius");
+        Guard.number(impulse, "impulse");
+        Guard.number(upward, "upward");
         for (PhysBody pb : bodies.values()) {
             if (pb.def.type != MotionKind.DYNAMIC || !pb.ready) {
                 continue;
@@ -708,6 +742,8 @@ public final class PhysWorld {
     }
 
     public List<PhysBody> inSphere(double[] c, double r) {
+        Guard.position(c, "c");
+        Guard.number(r, "r");
         List<PhysBody> out = new ArrayList<>();
         for (PhysBody pb : bodies.values()) {
             if (pb.def.internal) {
@@ -728,6 +764,8 @@ public final class PhysWorld {
     }
 
     public List<PhysBody> inBox(double[] min, double[] max) {
+        Guard.position(min, "min");
+        Guard.position(max, "max");
         List<PhysBody> out = new ArrayList<>();
         for (PhysBody pb : bodies.values()) {
             if (pb.def.internal) {
@@ -914,23 +952,56 @@ public final class PhysWorld {
 
     private void step(float dt) {
         long start = System.nanoTime();
-        applyFields(dt);
+        try {
+            applyFields(dt);
+        }
+        catch (Throwable t) {
+            log.warning("Field update failed in world " + id + ": " + t);
+        }
+        boolean failed = false;
         queryLock.writeLock().lock();
         try {
             system.update(dt, engine.config().collisionSteps, engine.tempAllocator(), engine.jobSystem());
         }
+        catch (Throwable t) {
+            failed = true;
+            log.severe("Physics step failed in world " + id + ": " + t);
+        }
         finally {
             queryLock.writeLock().unlock();
         }
+        if (failed) {
+            if (++stepFailures >= 3) {
+                paused = true;
+                stepFailures = 0;
+                log.severe("World " + id + " was paused after repeated physics errors. Fix the cause and use physworld resume.");
+            }
+            return;
+        }
+        stepFailures = 0;
         stepCount++;
         int active = 0;
+        List<String> broken = null;
         for (PhysBody pb : bodies.values()) {
             publish(pb, false);
-            if (pb.snapshot.active) {
+            Snapshot s = pb.snapshot;
+            if (pb.ready && !Guard.inWorld(s.px, s.py, s.pz)) {
+                if (broken == null) {
+                    broken = new ArrayList<>();
+                }
+                broken.add(pb.name);
+            }
+            if (s.active) {
                 active++;
             }
         }
         activeCount = active;
+        if (broken != null) {
+            for (String name : broken) {
+                log.warning("Body " + name + " in world " + id + " reached an invalid position and was removed.");
+                removeBody(name);
+            }
+        }
         lastStepNanos = System.nanoTime() - start;
     }
 
@@ -1085,17 +1156,15 @@ public final class PhysWorld {
     void destroy() {
         destroyed = true;
         post(() -> {
+            for (Map.Entry<String, Object> entry : new ArrayList<>(constraints.entrySet())) {
+                dropConstraint(entry.getKey());
+            }
             for (PhysBody pb : new ArrayList<>(bodies.values())) {
                 pb.removed = true;
                 destroyBody(pb);
             }
             bodies.clear();
             byJoltId.clear();
-            for (Map.Entry<String, Object> entry : constraints.entrySet()) {
-                if (entry.getValue() instanceof Constraint) {
-                    system.removeConstraint((Constraint) entry.getValue());
-                }
-            }
             constraints.clear();
             constraintBodies.clear();
             constraintDefs.clear();

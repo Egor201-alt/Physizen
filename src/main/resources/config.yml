@@ -1,42 +1,49 @@
-# Частота шага физики в секунду по умолчанию для новых миров (60 = идеальный баланс плавности и нагрузки)
+# Default physics tick rate per second for new worlds (60 = ideal balance between smoothness and load)
 tick_rate: 60
 
-# Количество рабочих потоков Jolt (0 = автоопределение половины ядер процессора)
+# Number of Jolt worker threads (0 = auto-detect half of the CPU cores)
 worker_threads: 0
 
-# Память временного аллокатора Jolt в мегабайтах
+# Jolt temp allocator memory in megabytes
 temp_allocator_megabytes: 16
 
-# Максимальное количество тел в одном мире симуляции
+# Maximum number of bodies in a single simulation world
 max_bodies: 65536
 max_body_pairs: 65536
 max_contact_constraints: 20480
 
-# Максимальное количество шагов догона, если сервер лагает
+# Maximum number of catch-up steps if the server lags
 max_catchup_steps: 4
 
-# Итерации коллизий за шаг (1 вполне достаточно для стабильных твердых тел)
+# Collision iterations per step (1 is sufficient for stable rigid bodies)
 collision_steps: 1
 
-# Лимит очереди событий столкновений (защита от переполнения памяти)
+# Contact event queue limit (memory overflow protection)
 contact_event_queue_limit: 4096
 
-# Высота, ниже которой нестатические тела считаются улетевшими в бездну
+# Y-level below which non-static bodies are considered fallen into the void
 fall_out_y: -128.0
 
-# Минимальная скорость удара (м/с) для вызова события столкновения в скриптах
+# Minimum impact velocity (m/s) to trigger a contact event in scripts
 contact_min_speed: 0.5
 
-# Вариант нативных библиотек: auto, baseline или optimized (AVX2/FMA)
+# Native library variant: auto, baseline, or optimized (AVX2/FMA)
 native_variant: auto
 
-# Автосохранение физических тел, привязанных к дисплеям (хранится в самой сущности, чанки не раздувает)
+# Auto-saving of physics bodies attached to displays (stored within the entity itself, does not bloat chunks)
 persistence:
-  # Включить сохранение и восстановление тел после рестарта и перезагрузки чанков
+  # Enable saving and restoring bodies after restarts and chunk reloads
   enabled: true
-  # Создавать физмир автоматически, если сущность помнит мир, которого ещё нет
+  # Automatically create a physics world if an entity remembers a world that doesn't exist yet
   auto_create_world: true
-  # Убирать тело из симуляции, когда выгружаются все его дисплеи (оно вернётся при загрузке чанка)
+  # Remove body from simulation when all its displays are unloaded (it will be restored upon chunk load)
   unload_bodies: true
-  # Как часто (сек) обновлять сохранённые данные тел в сущностях (0 = только при выгрузке и выключении)
+  # How often (in seconds) to update saved body data in entities (0 = only on unload and shutdown)
   refresh_seconds: 30
+
+# Safety limits: protects the server from scripts creating too many objects
+limits:
+  # Maximum number of physics bodies per world
+  max_bodies_per_world: 20000
+  # Maximum number of constraints per world
+  max_constraints_per_world: 4096

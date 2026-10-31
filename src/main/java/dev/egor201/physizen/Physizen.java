@@ -99,6 +99,8 @@ public class Physizen extends JavaPlugin implements CommandExecutor, org.bukkit.
         cfg.workerThreads = configuredThreads > 0 ? configuredThreads : Math.max(1, Runtime.getRuntime().availableProcessors() / 2);
         cfg.tempAllocatorMegabytes = getConfig().getInt("temp_allocator_megabytes", 16);
         cfg.maxBodies = getConfig().getInt("max_bodies", 65536);
+        cfg.maxBodiesPerWorld = Math.max(1, getConfig().getInt("limits.max_bodies_per_world", 20000));
+        cfg.maxConstraintsPerWorld = Math.max(1, getConfig().getInt("limits.max_constraints_per_world", 4096));
         cfg.maxBodyPairs = getConfig().getInt("max_body_pairs", 65536);
         cfg.maxContactConstraints = getConfig().getInt("max_contact_constraints", 20480);
         cfg.maxCatchupSteps = getConfig().getInt("max_catchup_steps", 4);

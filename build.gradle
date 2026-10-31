@@ -3,6 +3,9 @@ plugins {
     id 'com.gradleup.shadow' version '8.3.5'
 }
 
+def buildNumber = (findProperty('buildNumber') ?: System.getenv('BUILD_NUMBER') ?: 'local').toString()
+version = "${pluginVersion}-b${buildNumber}"
+
 java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(21)

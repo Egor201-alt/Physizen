@@ -12,6 +12,7 @@ import com.denizenscript.denizencore.tags.TagContext;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import dev.egor201.physizen.core.ObjParser;
 import dev.egor201.physizen.core.PhysEngine;
+import dev.egor201.physizen.core.Guard;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.PhysWorld;
 import dev.egor201.physizen.core.ShapeSpec;
@@ -66,7 +67,9 @@ public final class Util {
             throw new PhysException("Invalid vector '" + tag + "'.");
         }
         try {
-            return new double[]{Double.parseDouble(parts[0].trim()), Double.parseDouble(parts[1].trim()), Double.parseDouble(parts[2].trim())};
+            double[] parsed = new double[]{Double.parseDouble(parts[0].trim()), Double.parseDouble(parts[1].trim()), Double.parseDouble(parts[2].trim())};
+            Guard.vec(parsed, "vector");
+            return parsed;
         }
         catch (NumberFormatException e) {
             throw new PhysException("Invalid vector '" + tag + "'.");
@@ -78,7 +81,9 @@ public final class Util {
             return fallback;
         }
         try {
-            return Double.parseDouble(tag.toString().trim());
+            double parsed = Double.parseDouble(tag.toString().trim());
+            Guard.number(parsed, "number");
+            return parsed;
         }
         catch (NumberFormatException e) {
             throw new PhysException("Invalid number '" + tag + "'.");
