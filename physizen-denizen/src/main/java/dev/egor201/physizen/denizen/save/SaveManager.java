@@ -7,14 +7,11 @@ import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.objects.core.QuaternionTag;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
 import dev.egor201.physizen.core.model.BodyDef;
 import dev.egor201.physizen.core.model.ConstraintDef;
 import dev.egor201.physizen.core.model.MotionKind;
 import dev.egor201.physizen.bukkit.PhysizenServices;
 import dev.egor201.physizen.bukkit.display.DisplayBinder;
-import dev.egor201.physizen.core.io.PhysBinary;
 import dev.egor201.physizen.denizen.DenizenServices;
 import dev.egor201.physizen.denizen.args.Args;
 import dev.egor201.physizen.denizen.args.ShapeCodec;
@@ -34,14 +31,7 @@ import org.bukkit.entity.TextDisplay;
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -51,8 +41,6 @@ import java.util.Map;
 import java.util.Set;
 
 public final class SaveManager {
-
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
 
     private SaveManager() {
     }
@@ -155,96 +143,12 @@ public final class SaveManager {
             boolean aIn = def.bodyA == null || included.contains(def.bodyA);
             boolean bIn = def.bodyB == null || included.contains(def.bodyB);
             if (aIn && bIn && (def.bodyA != null || def.bodyB != null)) {
-                MapTag cMap = constraintToMap(def);
+                MapTag cMap = ConstraintCodec.toMap(def);
                 constraintsList.addObject(cMap);
             }
         }
         root.putObject("constraints", constraintsList);
         return root;
-    }
-
-    private static File resolveFile(String fileName, boolean write) {
-        if (fileName == null || fileName.trim().isEmpty() || fileName.contains("..") || fileName.startsWith("/") || fileName.startsWith("\\") || fileName.contains(":")) {
-            throw new PhysException("Invalid save file name.");
-        }
-        String n = fileName.trim();
-        String lower = n.toLowerCase();
-        File folder = DenizenServices.saveFolder();
-        if (write) {
-            if (!lower.endsWith(".json") && !lower.endsWith(".phys")) {
-                n += ".phys";
-            }
-            File f = new File(folder, n);
-            if (f.getParentFile() != null) {
-                f.getParentFile().mkdirs();
-            }
-            return f;
-        }
-        if (lower.endsWith(".json") || lower.endsWith(".phys")) {
-            return new File(folder, n);
-        }
-        File phys = new File(folder, n + ".phys");
-        return phys.isFile() ? phys : new File(folder, n + ".json");
-    }
-
-    public static void saveToFile(MapTag root, String fileName) {
-        File file = resolveFile(fileName, true);
-        try {
-            Object unpacked = unpack(root);
-            if (file.getName().toLowerCase().endsWith(".json")) {
-                try (BufferedWriter writer = new BufferedWriter(new FileWriter(file, StandardCharsets.UTF_8))) {
-                    GSON.toJson(unpacked, writer);
-                }
-            }
-            else {
-                Files.write(file.toPath(), PhysBinary.encodeFile(unpacked));
-            }
-        }
-        catch (Exception e) {
-            throw new PhysException("Failed to save prefab to " + file.getName() + ": " + e.getMessage(), e);
-        }
-    }
-
-    public static MapTag loadFromFile(String fileName) {
-        File file = resolveFile(fileName, false);
-        if (!file.isFile()) {
-            throw new PhysException("Save file not found: " + file.getName());
-        }
-        try {
-            byte[] data = Files.readAllBytes(file.toPath());
-            Object raw;
-            if (PhysBinary.isFile(data)) {
-                raw = PhysBinary.decodeFile(data);
-            }
-            else {
-                raw = GSON.fromJson(new String(data, StandardCharsets.UTF_8), Object.class);
-            }
-            return (MapTag) pack(raw);
-        }
-        catch (Exception e) {
-            throw new PhysException("Failed to load prefab from " + file.getName() + ": " + e.getMessage(), e);
-        }
-    }
-
-    public static List<String> listSavedFiles() {
-        File folder = DenizenServices.saveFolder();
-        File[] files = folder.listFiles((dir, name) -> name.endsWith(".json") || name.endsWith(".phys"));
-        Set<String> names = new LinkedHashSet<>();
-        if (files != null) {
-            for (File f : files) {
-                String name = f.getName();
-                names.add(name.substring(0, name.length() - 5));
-            }
-        }
-        return new ArrayList<>(names);
-    }
-
-    public static byte[] toBlob(MapTag map) throws IOException {
-        return PhysBinary.encodeRaw(unpack(map));
-    }
-
-    public static MapTag fromBlob(byte[] data) throws IOException {
-        return (MapTag) pack(PhysBinary.decodeRaw(data));
     }
 
     public static BodyDef defFromMap(MapTag bMap, String name) {
@@ -426,7 +330,7 @@ public final class SaveManager {
                     if (cMap.containsKey("axis")) def.axis = Args.vec(cMap.getObject("axis"), CoreUtilities.noDebugContext);
                 }
 
-                applyConstraintCommon(def, cMap);
+                ConstraintCodec.applyCommon(def, cMap);
 
                 pw.addConstraint(def);
             }
@@ -455,145 +359,4 @@ public final class SaveManager {
         return binding;
     }
 
-    private static String join3(double[] v) {
-        return v[0] + "," + v[1] + "," + v[2];
-    }
-
-    public static MapTag constraintToMap(ConstraintDef def) {
-        MapTag cMap = new MapTag();
-        cMap.putObject("name", new ElementTag(def.name));
-        cMap.putObject("type", new ElementTag(def.kind.name()));
-        if (def.bodyA != null) cMap.putObject("body_a", new ElementTag(def.bodyA));
-        if (def.bodyB != null) cMap.putObject("body_b", new ElementTag(def.bodyB));
-        cMap.putObject("point_a", new ElementTag(join3(def.pointA)));
-        if (def.pointB != null) cMap.putObject("point_b", new ElementTag(join3(def.pointB)));
-        cMap.putObject("axis", new ElementTag(join3(def.axis)));
-        cMap.putObject("normal", new ElementTag(join3(def.normalAxis)));
-        cMap.putObject("limited", new ElementTag(def.limited));
-        cMap.putObject("limits", new ElementTag(def.limitMin + "," + def.limitMax));
-        cMap.putObject("friction", new ElementTag(def.maxFriction));
-        cMap.putObject("spring_freq", new ElementTag(def.springFrequency));
-        cMap.putObject("spring_damp", new ElementTag(def.springDamping));
-        cMap.putObject("cone_angle", new ElementTag(Math.toDegrees(def.halfConeAngle)));
-        cMap.putObject("motor_state", new ElementTag(def.motorState.name().toLowerCase()));
-        cMap.putObject("motor_target", new ElementTag(def.motorTarget));
-        cMap.putObject("motor_torque", new ElementTag(def.motorMaxTorque));
-        cMap.putObject("motor_force", new ElementTag(def.motorMaxForce));
-        cMap.putObject("motor_spring_freq", new ElementTag(def.motorSpringFrequency));
-        cMap.putObject("motor_spring_damp", new ElementTag(def.motorSpringDamping));
-        if (def.localA != null) {
-            cMap.putObject("local_a", new ElementTag(join3(def.localA)));
-            cMap.putObject("local_b", new ElementTag(join3(def.localB)));
-            cMap.putObject("local_axis", new ElementTag(join3(def.localAxis)));
-            cMap.putObject("local_normal", new ElementTag(join3(def.localNormal)));
-        }
-        return cMap;
-    }
-
-    public static List<MapTag> constraintsOf(PhysWorld pw, String bodyName) {
-        List<MapTag> list = new ArrayList<>();
-        for (String cName : pw.constraintNames()) {
-            ConstraintDef def = pw.constraintDef(cName);
-            if (def != null && (bodyName.equals(def.bodyA) || bodyName.equals(def.bodyB))) {
-                list.add(constraintToMap(def));
-            }
-        }
-        return list;
-    }
-
-    private static void applyConstraintCommon(ConstraintDef def, MapTag cMap) {
-        if (cMap.containsKey("normal")) def.normalAxis = Args.vec(cMap.getObject("normal"), CoreUtilities.noDebugContext);
-        if (cMap.containsKey("limits")) {
-            double[] lim = Args.pair(cMap.getObject("limits"));
-            def.limitMin = lim[0];
-            def.limitMax = lim[1];
-            def.limited = Args.bool(cMap.getObject("limited"), true);
-        }
-        def.maxFriction = Args.num(cMap.getObject("friction"), 0);
-        def.springFrequency = Args.num(cMap.getObject("spring_freq"), 0);
-        def.springDamping = Args.num(cMap.getObject("spring_damp"), 0.5);
-        if (cMap.containsKey("cone_angle")) {
-            def.halfConeAngle = Math.toRadians(Args.num(cMap.getObject("cone_angle"), 45.0));
-        }
-
-        if (cMap.containsKey("motor_state")) {
-            String stateStr = cMap.getElement("motor_state").asString().toLowerCase();
-            if (stateStr.equals("velocity")) def.motorState = ConstraintDef.MotorState.VELOCITY;
-            else if (stateStr.equals("position")) def.motorState = ConstraintDef.MotorState.POSITION;
-            else def.motorState = ConstraintDef.MotorState.OFF;
-        }
-        def.motorTarget = Args.num(cMap.getObject("motor_target"), 0);
-        def.motorMaxTorque = Args.num(cMap.getObject("motor_torque"), 0);
-        def.motorMaxForce = Args.num(cMap.getObject("motor_force"), 0);
-        def.motorSpringFrequency = Args.num(cMap.getObject("motor_spring_freq"), 2.0);
-        def.motorSpringDamping = Args.num(cMap.getObject("motor_spring_damp"), 1.0);
-    }
-
-    public static ConstraintDef constraintFromBlob(PhysWorld pw, MapTag cMap) {
-        ConstraintDef def = new ConstraintDef();
-        def.name = cMap.getElement("name").asString();
-        def.kind = ConstraintDef.Kind.valueOf(cMap.getElement("type").asString().toUpperCase());
-        if (cMap.containsKey("body_a")) def.bodyA = cMap.getElement("body_a").asString();
-        if (cMap.containsKey("body_b")) def.bodyB = cMap.getElement("body_b").asString();
-        applyConstraintCommon(def, cMap);
-        PhysBody a = def.bodyA == null ? null : pw.body(def.bodyA);
-        PhysBody b = def.bodyB == null ? null : pw.body(def.bodyB);
-        if (cMap.containsKey("local_a")) {
-            def.pointA = ConstraintDef.toWorld(a == null ? null : a.snapshot, Args.vec(cMap.getObject("local_a"), CoreUtilities.noDebugContext));
-            def.pointB = ConstraintDef.toWorld(b == null ? null : b.snapshot, Args.vec(cMap.getObject("local_b"), CoreUtilities.noDebugContext));
-            def.axis = ConstraintDef.rotate(a == null ? null : a.snapshot, Args.vec(cMap.getObject("local_axis"), CoreUtilities.noDebugContext), false);
-            def.normalAxis = ConstraintDef.rotate(a == null ? null : a.snapshot, Args.vec(cMap.getObject("local_normal"), CoreUtilities.noDebugContext), false);
-        }
-        else {
-            def.pointA = Args.vec(cMap.getObject("point_a"), CoreUtilities.noDebugContext);
-            def.pointB = cMap.containsKey("point_b") ? Args.vec(cMap.getObject("point_b"), CoreUtilities.noDebugContext) : def.pointA;
-            if (cMap.containsKey("axis")) def.axis = Args.vec(cMap.getObject("axis"), CoreUtilities.noDebugContext);
-        }
-        return def;
-    }
-
-    private static Object unpack(ObjectTag tag) {
-        if (tag instanceof MapTag) {
-            Map<String, Object> map = new LinkedHashMap<>();
-            MapTag mt = (MapTag) tag;
-            for (String key : mt.keys()) {
-                map.put(key, unpack(mt.getObject(key)));
-            }
-            return map;
-        }
-        else if (tag instanceof ListTag) {
-            List<Object> list = new ArrayList<>();
-            ListTag lt = (ListTag) tag;
-            for (ObjectTag obj : lt.objectForms) {
-                list.add(unpack(obj));
-            }
-            return list;
-        }
-        else {
-            return tag.toString();
-        }
-    }
-
-    @SuppressWarnings("unchecked")
-    private static ObjectTag pack(Object obj) {
-        if (obj instanceof Map) {
-            MapTag map = new MapTag();
-            Map<String, Object> m = (Map<String, Object>) obj;
-            for (Map.Entry<String, Object> entry : m.entrySet()) {
-                map.putObject(entry.getKey(), pack(entry.getValue()));
-            }
-            return map;
-        }
-        else if (obj instanceof List) {
-            ListTag list = new ListTag();
-            List<Object> l = (List<Object>) obj;
-            for (Object item : l) {
-                list.addObject(pack(item));
-            }
-            return list;
-        }
-        else {
-            return new ElementTag(String.valueOf(obj));
-        }
-    }
 }

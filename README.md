@@ -6,7 +6,7 @@
 *Powered by Jolt Physics Engine via `jolt-jni`.*
 
 [![Paper](https://img.shields.io/badge/Platform-Paper%201.21%2B-00a8ff?style=for-the-badge&logo=papermc&logoColor=white)](https://papermc.io)
-[![Java](https://img.shields.io/badge/Java-21%2B-ED8B00?style=for-the-badge)](https://adoptium.net)
+[![Java](https://img.shields.io/badge/Java-21%2B-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)](https://adoptium.net)
 [![Physics](https://img.shields.io/badge/Engine-Jolt%206.2.0-ff4757?style=for-the-badge)](https://github.com/jrouwe/JoltPhysics)
 [![Addon](https://img.shields.io/badge/Addon%20For-DenizenM-2ed573?style=for-the-badge)](https://github.com/Energobro/DenizenM-Tjtoxshpilivili1)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg?style=for-the-badge)](LICENSE)

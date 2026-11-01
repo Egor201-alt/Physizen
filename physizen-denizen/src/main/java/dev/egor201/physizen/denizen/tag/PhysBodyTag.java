@@ -384,6 +384,169 @@ public class PhysBodyTag implements ObjectTag {
         });
 
         // <--[tag]
+        // @attribute <PhysBodyTag.kinetic_energy>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the linear kinetic energy of the body (0.5 * mass * speed^2). Static and kinematic bodies have no mass, so this is 0 for them.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "kinetic_energy", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            return new ElementTag(b.kineticEnergy());
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.momentum>
+        // @returns LocationTag
+        // @description
+        // Returns the linear momentum vector of the body (mass * velocity).
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(LocationTag.class, "momentum", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            double[] m = b.momentum();
+            return new LocationTag((World) null, m[0], m[1], m[2]);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.touching>
+        // @returns ListTag(PhysBodyTag)
+        // @description
+        // Returns the bodies this body is currently in contact with. Terrain and sensor zones are not listed.
+        // Contacts are only tracked for bodies created with notify:true, so this is empty for all other bodies.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "touching", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            ListTag list = new ListTag();
+            for (PhysBody other : b.touching()) {
+                list.addObject(new PhysBodyTag(object.worldId, other.name));
+            }
+            return list;
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.is_touching[<name>]>
+        // @returns ElementTag(Boolean)
+        // @description
+        // Returns whether this body is currently in contact with the body of the given name in the same world. Requires notify:true on this body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, ElementTag.class, "is_touching", (attribute, object, param) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            String wanted = param.asString();
+            for (PhysBody other : b.touching()) {
+                if (other.name.equals(wanted)) {
+                    return new ElementTag(true);
+                }
+            }
+            return new ElementTag(false);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.friction>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the friction coefficient of the body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "friction", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            return new ElementTag(b.def.friction);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.restitution>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the restitution (bounciness) of the body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "restitution", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            return new ElementTag(b.def.restitution);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.gravity_factor>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the gravity multiplier of the body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "gravity_factor", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            return new ElementTag(b.def.gravityFactor);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.damping>
+        // @returns MapTag
+        // @description
+        // Returns a map with the 'linear' and 'angular' damping of the body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, "damping", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            MapTag map = new MapTag();
+            map.putObject("linear", new ElementTag(b.def.linearDamping));
+            map.putObject("angular", new ElementTag(b.def.angularDamping));
+            return map;
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.notifies>
+        // @returns MapTag
+        // @description
+        // Returns a map showing which events the body reports: 'contacts' (notify), 'persisted' (notify_persist) and 'sensor' (is a sensor zone).
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, "notifies", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            MapTag map = new MapTag();
+            map.putObject("contacts", new ElementTag(b.def.notify));
+            map.putObject("persisted", new ElementTag(b.def.notifyPersist));
+            map.putObject("sensor", new ElementTag(b.def.sensor));
+            return map;
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.half_extents>
+        // @returns LocationTag
+        // @description
+        // Returns the approximate half size of the body's shape as a vector.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(LocationTag.class, "half_extents", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null) return null;
+            double[] h = b.def.shape.halfExtentsEstimate();
+            return new LocationTag((World) null, h[0], h[1], h[2]);
+        });
+
+        // <--[tag]
+        // @attribute <PhysBodyTag.character>
+        // @returns PhysCharacterTag
+        // @description
+        // Returns the character controller this body belongs to, or null if it is a normal body.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(PhysCharacterTag.class, "character", (attribute, object) -> {
+            PhysBody b = object.body();
+            if (b == null || b.character() == null) return null;
+            return new PhysCharacterTag(object.worldId, object.name);
+        });
+
+        // <--[tag]
         // @attribute <PhysBodyTag.to_map>
         // @returns MapTag
         // @description

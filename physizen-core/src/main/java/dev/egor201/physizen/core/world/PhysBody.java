@@ -68,6 +68,22 @@ public final class PhysBody {
         return def.sensor;
     }
 
+    public double[] momentum() {
+        Snapshot s = snapshot;
+        double m = cachedMass;
+        return new double[]{s.vx * m, s.vy * m, s.vz * m};
+    }
+
+    public double kineticEnergy() {
+        Snapshot s = snapshot;
+        double v = s.speed();
+        return 0.5 * cachedMass * v * v;
+    }
+
+    public List<PhysBody> touching() {
+        return world.touching(this);
+    }
+
     private boolean usable() {
         return ready && !removed && character == null;
     }

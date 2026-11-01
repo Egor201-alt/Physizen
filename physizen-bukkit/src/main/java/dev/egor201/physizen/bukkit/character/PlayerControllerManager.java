@@ -25,6 +25,7 @@ public final class PlayerControllerManager implements Listener {
     private static final double TICK_SECONDS = 0.05;
     private static final double TELEPORT_DISTANCE_SQUARED = 36.0;
     private static final double MAX_SPEED = 80.0;
+    private static final double SMOOTHING = 0.6;
 
     public static final class Controller {
 
@@ -34,6 +35,9 @@ public final class PlayerControllerManager implements Listener {
         double lastX;
         double lastY;
         double lastZ;
+        double smoothX;
+        double smoothY;
+        double smoothZ;
         boolean hasLast;
 
         Controller(UUID playerId, String worldId, String name) {
@@ -138,11 +142,17 @@ public final class PlayerControllerManager implements Listener {
             double dz = position[2] - c.lastZ;
             if (dx * dx + dy * dy + dz * dz > TELEPORT_DISTANCE_SQUARED) {
                 character.teleport(position, null);
+                c.smoothX = 0;
+                c.smoothY = 0;
+                c.smoothZ = 0;
             }
             else {
-                velocity[0] = clamp(dx / TICK_SECONDS);
-                velocity[1] = clamp(dy / TICK_SECONDS);
-                velocity[2] = clamp(dz / TICK_SECONDS);
+                c.smoothX += (clamp(dx / TICK_SECONDS) - c.smoothX) * SMOOTHING;
+                c.smoothY += (clamp(dy / TICK_SECONDS) - c.smoothY) * SMOOTHING;
+                c.smoothZ += (clamp(dz / TICK_SECONDS) - c.smoothZ) * SMOOTHING;
+                velocity[0] = c.smoothX;
+                velocity[1] = c.smoothY;
+                velocity[2] = c.smoothZ;
             }
         }
         c.lastX = position[0];
