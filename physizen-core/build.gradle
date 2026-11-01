@@ -1,0 +1,3 @@
+dependencies {
+    api "com.github.stephengold:jolt-jni-Linux64:${rootProject.joltVersion}"
+}

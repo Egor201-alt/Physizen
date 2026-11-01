@@ -1,0 +1,41 @@
+plugins {
+    id 'com.gradleup.shadow' version '8.3.5'
+}
+
+dependencies {
+    implementation project(':physizen-core')
+    implementation project(':physizen-bukkit')
+    implementation project(':physizen-denizen')
+
+    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
+    compileOnly('com.denizenscript:denizen:1.3.1-SNAPSHOT') {
+        transitive = false
+    }
+
+    runtimeOnly "com.github.stephengold:jolt-jni-Linux64:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-Linux64_fma:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-Windows64:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-Windows64_avx2:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-Linux_ARM64:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-Windows_ARM64:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-MacOSX64:${rootProject.joltVersion}:ReleaseSp"
+    runtimeOnly "com.github.stephengold:jolt-jni-MacOSX_ARM64:${rootProject.joltVersion}:ReleaseSp"
+}
+
+tasks.processResources {
+    def props = [version: project.version]
+    inputs.properties props
+    filteringCharset 'UTF-8'
+    filesMatching('plugin.yml') {
+        expand props
+    }
+}
+
+tasks.shadowJar {
+    archiveClassifier.set('')
+    archiveFileName.set("Physizen-${project.version}.jar")
+}
+
+tasks.build {
+    dependsOn tasks.shadowJar
+}
