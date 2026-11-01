@@ -1,0 +1,61 @@
+# Default physics tick rate per second for new worlds (60 = ideal balance between smoothness and load)
+tick_rate: 60
+
+# Number of Jolt worker threads (0 = auto-detect half of the CPU cores)
+worker_threads: 0
+
+# Jolt temp allocator memory in megabytes
+temp_allocator_megabytes: 16
+
+# Maximum number of bodies in a single simulation world
+max_bodies: 65536
+max_body_pairs: 65536
+max_contact_constraints: 20480
+
+# Maximum number of catch-up steps if the server lags
+max_catchup_steps: 4
+
+# Collision iterations per step (1 is sufficient for stable rigid bodies)
+collision_steps: 1
+
+# Contact event queue limit (memory overflow protection)
+contact_event_queue_limit: 4096
+
+# Y-level below which non-static bodies are considered fallen into the void
+fall_out_y: -128.0
+
+# Minimum impact velocity (m/s) to trigger a contact event in scripts
+contact_min_speed: 0.5
+
+# Every N physics steps, 'physbody contact persisted' fires for bodies created with notify_persist:true (0 = never)
+contact_persist_interval_steps: 6
+
+# Every N physics steps, 'physsensor stay' fires for bodies inside sensor zones (0 = never, enter/exit are always on)
+sensor_stay_interval_steps: 0
+
+# Native library variant: auto, baseline, or optimized (AVX2/FMA)
+native_variant: auto
+
+# Auto-saving of physics bodies attached to displays (stored within the entity itself, does not bloat chunks)
+persistence:
+  # Enable saving and restoring bodies after restarts and chunk reloads
+  enabled: true
+  # Automatically create a physics world if an entity remembers a world that doesn't exist yet
+  auto_create_world: true
+  # Remove body from simulation when all its displays are unloaded (it will be restored upon chunk load)
+  unload_bodies: true
+  # How often (in seconds) to update saved body data in entities (0 = only on unload and shutdown)
+  refresh_seconds: 30
+
+# Safety limits: protects the server from scripts creating too many objects
+limits:
+  # Maximum number of physics bodies per world
+  max_bodies_per_world: 20000
+  # Maximum number of constraints per world
+  max_constraints_per_world: 4096
+  # Maximum number of CharacterVirtual controllers per world
+  max_characters_per_world: 256
+  # Maximum number of parts in a compound shape created by scripts
+  max_compound_children: 256
+  # Maximum number of parts in an internal terrain tile shape
+  max_terrain_compound_children: 8192

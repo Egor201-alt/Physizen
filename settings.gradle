@@ -1,1 +1,6 @@
 rootProject.name = 'Physizen'
+
+include 'physizen-core'
+include 'physizen-bukkit'
+include 'physizen-denizen'
+include 'physizen-plugin'

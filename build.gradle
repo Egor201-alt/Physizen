@@ -1,72 +1,32 @@
-plugins {
-    id 'java'
-    id 'com.gradleup.shadow' version '8.3.5'
-}
-
 def buildNumber = (findProperty('buildNumber') ?: System.getenv('BUILD_NUMBER') ?: 'local').toString()
-version = "${pluginVersion}-b${buildNumber}"
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+allprojects {
+    group = rootProject.group
+    version = "${rootProject.pluginVersion}-b${buildNumber}"
+
+    repositories {
+        mavenCentral()
+        maven {
+            name = 'papermc'
+            url = 'https://repo.papermc.io/repository/maven-public/'
+        }
+        maven {
+            name = 'citizens-repo'
+            url = 'https://maven.citizensnpcs.co/repo'
+        }
     }
 }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-}
+subprojects {
+    apply plugin: 'java-library'
 
-repositories {
-    mavenCentral()
-    maven {
-        name = 'papermc'
-        url = 'https://repo.papermc.io/repository/maven-public/'
-    }
-    maven {
-        name = 'citizens-repo'
-        url = 'https://maven.citizensnpcs.co/repo'
-    }
-}
-
-ext {
-    joltVersion = '6.2.0'
-}
-
-dependencies {
-    // Paper API 1.21+
-    compileOnly 'io.papermc.paper:paper-api:1.21.1-R0.1-SNAPSHOT'
-
-    // Denizen 1.3.1+
-    compileOnly('com.denizenscript:denizen:1.3.1-SNAPSHOT') {
-        transitive = false
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
     }
 
-    // Jolt Natives & Classes
-    implementation "com.github.stephengold:jolt-jni-Linux64:${joltVersion}"
-    implementation "com.github.stephengold:jolt-jni-Linux64:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-Linux64_fma:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-Windows64:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-Windows64_avx2:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-Linux_ARM64:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-Windows_ARM64:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-MacOSX64:${joltVersion}:ReleaseSp"
-    implementation "com.github.stephengold:jolt-jni-MacOSX_ARM64:${joltVersion}:ReleaseSp"
-}
-
-tasks.processResources {
-    def props = [version: version]
-    inputs.properties props
-    filteringCharset 'UTF-8'
-    filesMatching('plugin.yml') {
-        expand props
+    tasks.withType(JavaCompile).configureEach {
+        options.encoding = 'UTF-8'
     }
-}
-
-tasks.shadowJar {
-    archiveClassifier.set('')
-    archiveFileName.set("Physizen-${project.version}.jar")
-}
-
-tasks.build {
-    dependsOn tasks.shadowJar
 }

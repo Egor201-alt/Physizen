@@ -1,0 +1,19 @@
+name: Physizen
+version: '${version}'
+main: dev.egor201.physizen.Physizen
+api-version: '1.21'
+author: egor201
+description: Jolt physics addon for DenizenM
+depend:
+  - Denizen
+
+commands:
+  physizen:
+    description: Shows physics worlds status and diagnostics.
+    permission: physizen.admin
+    usage: /physizen [status]
+
+permissions:
+  physizen.admin:
+    description: Allows administrative control and diagnostics of Physizen.
+    default: op
