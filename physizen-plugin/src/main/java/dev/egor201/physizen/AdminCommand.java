@@ -23,7 +23,7 @@ final class AdminCommand implements CommandExecutor, TabCompleter {
     @Override
     public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
         if (args.length == 1 && sender.hasPermission("physizen.admin")) {
-            return Collections.singletonList("status");
+            return Collections.singletonList("statusbar");
         }
         return Collections.emptyList();
     }
@@ -39,13 +39,13 @@ final class AdminCommand implements CommandExecutor, TabCompleter {
             sender.sendMessage("§cPhysEngine is not running.");
             return true;
         }
-        if (args.length > 0 && args[0].equalsIgnoreCase("status")) {
+        if (args.length > 0 && args[0].equalsIgnoreCase("statusbar")) {
             if (!(sender instanceof Player)) {
                 sender.sendMessage("§cOnly players can use the status bar.");
                 return true;
             }
             boolean shown = statusBars.toggle((Player) sender);
-            sender.sendMessage(shown ? "§bPhysizen §7status bar §aenabled§7. Run §f/physizen status §7again to hide it." : "§bPhysizen §7status bar §chidden§7.");
+            sender.sendMessage(shown ? "§bPhysizen §7status bar §aenabled§7. Run §f/physizen statusbar §7again to hide it." : "§bPhysizen §7status bar §chidden§7.");
             return true;
         }
         sender.sendMessage("§b--- Physizen Physics Status ---");

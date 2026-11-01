@@ -171,7 +171,7 @@ public class StatusBarManager implements Listener {
             loadProgress = shown;
             String state = worlds > 0 && paused == worlds ? " §c§lPAUSED §8| " : " §8| ";
             loadTitle = String.format(Locale.ROOT,
-                    "§b§lPhysizen §8»%s§7Load %s%d%% §8| §7Step §f%.2f§7/§f%.1f ms §8| §7Rate §f%.0f§7/§f%d Hz §8| §7Peak %s%d%%",
+                    "%s§7Load %s%d%% §8| §7Step §f%.2f§7/§f%.1f ms §8| §7Rate §f%.0f§7/§f%d Hz §8| §7Peak %s%d%%",
                     state, c, Math.round(smoothLoad * 100), worstStep, worstBudget, worstHz, worstTarget, colorCode(peakLoad), Math.round(peakLoad * 100));
             int displayCount = displays.totalBindings();
             int pendingCount = pending.getAsInt();
