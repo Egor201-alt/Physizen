@@ -56,7 +56,7 @@ public final class ConstraintCodec {
         for (String cName : pw.constraintNames()) {
             ConstraintDef def = pw.constraintDef(cName);
             if (def != null && (bodyName.equals(def.bodyA) || bodyName.equals(def.bodyB))) {
-                list.add(constraintToMap(def));
+                list.add(toMap(def));
             }
         }
         return list;
