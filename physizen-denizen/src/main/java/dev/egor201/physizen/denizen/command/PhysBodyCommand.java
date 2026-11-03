@@ -16,6 +16,7 @@ import com.denizenscript.denizencore.utilities.debugging.Debug;
 import dev.egor201.physizen.bukkit.display.DisplayBinder;
 import dev.egor201.physizen.bukkit.PhysizenServices;
 import dev.egor201.physizen.denizen.DenizenServices;
+import dev.egor201.physizen.denizen.save.PrefabFiles;
 import dev.egor201.physizen.denizen.save.SaveManager;
 import dev.egor201.physizen.core.model.BodyDef;
 import dev.egor201.physizen.core.model.MotionKind;
@@ -336,7 +337,7 @@ public class PhysBodyCommand extends AbstractCommand {
                         Debug.echoError(scriptEntry, "physbody save needs name:<name> or bodies:<list>.");
                         return;
                     }
-                    SaveManager.saveToFile(result, fileName);
+                    PrefabFiles.saveToFile(result, fileName);
                     break;
                 }
                 case "load":
@@ -347,7 +348,7 @@ public class PhysBodyCommand extends AbstractCommand {
                         return;
                     }
                     String fileName = scriptEntry.getElement("file").asString();
-                    MapTag root = SaveManager.loadFromFile(fileName);
+                    MapTag root = PrefabFiles.loadFromFile(fileName);
                     double[] targetPos = scriptEntry.hasObject("at") || scriptEntry.hasObject("position")
                             ? Args.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context)
                             : null;

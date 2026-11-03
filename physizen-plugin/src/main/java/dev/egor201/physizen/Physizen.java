@@ -70,7 +70,14 @@ public final class Physizen extends JavaPlugin {
         if (engine == null) {
             return;
         }
+        boolean report = currentTick % 100 == 0;
         for (PhysWorld world : engine.worlds()) {
+            if (report) {
+                long dropped = world.takeNewDroppedEvents();
+                if (dropped > 0) {
+                    getLogger().warning("World " + world.id + " dropped " + dropped + " physics events because the event queue was full. Raise contact_event_queue_limit or reduce notify usage.");
+                }
+            }
             PhysEvent event;
             while ((event = world.pollEvent()) != null) {
                 try {

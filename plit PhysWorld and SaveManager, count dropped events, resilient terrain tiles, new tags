@@ -1,0 +1,21 @@
+ README.md                                          |   2 [32m+[m[31m-[m
+ gradle.properties                                  |   2 [32m+[m[31m-[m
+ .../bukkit/character/PlayerControllerManager.java  |  16 [32m+[m[31m-[m
+ .../physizen/bukkit/status/StatusBarManager.java   |   2 [32m+[m[31m-[m
+ .../physizen/bukkit/terrain/TerrainManager.java    |  66 [32m++[m[31m-[m
+ .../dev/egor201/physizen/core/PhysException.java   |   2 [32m+[m
+ .../physizen/core/world/ContactTracker.java        |  14 [32m+[m
+ .../egor201/physizen/core/world/EventQueue.java    |  18 [32m+[m
+ .../dev/egor201/physizen/core/world/PhysBody.java  |  16 [32m+[m
+ .../dev/egor201/physizen/core/world/PhysWorld.java | 613 [32m+++++[m[31m----------------[m
+ .../egor201/physizen/core/world/WorldQueries.java  |   9 [32m+[m
+ .../physizen/denizen/command/PhysBodyCommand.java  |   5 [32m+[m[31m-[m
+ .../physizen/denizen/command/PhysWorldCommand.java |   5 [32m+[m[31m-[m
+ .../physizen/denizen/save/PersistenceManager.java  |   8 [32m+[m[31m-[m
+ .../egor201/physizen/denizen/save/SaveManager.java | 241 [32m+[m[31m-------[m
+ .../egor201/physizen/denizen/tag/PhysBodyTag.java  | 163 [32m++++++[m
+ .../physizen/denizen/tag/PhysCharacterTag.java     | 112 [32m++++[m
+ .../egor201/physizen/denizen/tag/PhysWorldTag.java |  91 [32m++[m[31m-[m
+ .../java/dev/egor201/physizen/AdminCommand.java    |   8 [32m+[m[31m-[m
+ .../main/java/dev/egor201/physizen/Physizen.java   |   7 [32m+[m
+ 20 files changed, 648 insertions(+), 752 deletions(-)

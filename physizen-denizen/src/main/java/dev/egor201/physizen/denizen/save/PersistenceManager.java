@@ -124,7 +124,7 @@ public class PersistenceManager implements Listener, BindingHooks {
             bodies.addObject(SaveManager.serializeBody(worldId, body, entity));
             root.putObject("bodies", bodies);
             ListTag constraints = new ListTag();
-            for (MapTag c : SaveManager.constraintsOf(world, bodyName)) {
+            for (MapTag c : ConstraintCodec.listFor(world, bodyName)) {
                 constraints.addObject(c);
             }
             List<MapTag> waiting = pendingConstraints.get(worldId);
@@ -136,7 +136,7 @@ public class PersistenceManager implements Listener, BindingHooks {
                 }
             }
             root.putObject("constraints", constraints);
-            entity.getPersistentDataContainer().set(key, PersistentDataType.BYTE_ARRAY, SaveManager.toBlob(root));
+            entity.getPersistentDataContainer().set(key, PersistentDataType.BYTE_ARRAY, PrefabFiles.toBlob(root));
         }
         catch (Exception e) {
             plugin.getLogger().warning("Failed to store physics data: " + e.getMessage());
@@ -243,7 +243,7 @@ public class PersistenceManager implements Listener, BindingHooks {
 
     private void applyConstraint(PhysWorld world, MapTag c) {
         try {
-            world.addConstraint(SaveManager.constraintFromBlob(world, c));
+            world.addConstraint(ConstraintCodec.fromMap(world, c));
         }
         catch (PhysException e) {
             plugin.getLogger().warning("Could not restore constraint " + nameOf(c, "name") + ": " + e.getMessage());
@@ -307,7 +307,7 @@ public class PersistenceManager implements Listener, BindingHooks {
         String worldId;
         String bodyName;
         try {
-            root = SaveManager.fromBlob(data);
+            root = PrefabFiles.fromBlob(data);
             worldId = root.getElement("world").asString();
             bMap = root.getObject("bodies").asType(ListTag.class, CoreUtilities.noDebugContext).objectForms.get(0).asType(MapTag.class, CoreUtilities.noDebugContext);
             bodyName = bMap.getElement("name").asString();

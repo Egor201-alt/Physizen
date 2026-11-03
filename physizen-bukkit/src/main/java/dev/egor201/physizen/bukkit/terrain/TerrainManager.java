@@ -86,6 +86,9 @@ public class TerrainManager implements Listener {
         }
     }
 
+    private static final long TILE_RETRY_STEPS = 600;
+
+    private final Map<TileKey, Long> failedTiles = new ConcurrentHashMap<>();
     private final WorldLinks links;
     private final Logger logger;
     private final Map<TileKey, TileData> activeTiles = new ConcurrentHashMap<>();
@@ -301,42 +304,51 @@ public class TerrainManager implements Listener {
 
             int snapshotBudget = 16;
             for (TileKey key : neededTiles) {
-                TileData tile = activeTiles.get(key);
-                World bukkitWorld = links.get(key.worldId);
-                if (bukkitWorld == null) continue;
+                Long retryAt = failedTiles.get(key);
+                if (retryAt != null && currentStep < retryAt) continue;
+                try {
+                    TileData tile = activeTiles.get(key);
+                    World bukkitWorld = links.get(key.worldId);
+                    if (bukkitWorld == null) continue;
 
-                if (tile != null && !tile.dirty) {
-                    continue;
-                }
+                    if (tile != null && !tile.dirty) {
+                        continue;
+                    }
 
-                int chunkX = key.tx;
-                int chunkZ = key.tz;
-                long chunkKey = (((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL);
+                    int chunkX = key.tx;
+                    int chunkZ = key.tz;
+                    long chunkKey = (((long) chunkX) << 32) | (chunkZ & 0xFFFFFFFFL);
 
-                ChunkSnapshot chunk = snapshotCache.get(chunkKey);
-                if (chunk == null) {
-                    if (snapshotBudget <= 0 && tile == null) continue;
-                    if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
+                    ChunkSnapshot chunk = snapshotCache.get(chunkKey);
+                    if (chunk == null) {
+                        if (snapshotBudget <= 0 && tile == null) continue;
+                        if (!bukkitWorld.isChunkLoaded(chunkX, chunkZ)) continue;
 
-                    chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
-                    snapshotCache.put(chunkKey, chunk);
-                    snapshotBudget--;
-                }
+                        chunk = bukkitWorld.getChunkAt(chunkX, chunkZ).getChunkSnapshot(false, false, false);
+                        snapshotCache.put(chunkKey, chunk);
+                        snapshotBudget--;
+                    }
 
-                if (tile == null) {
-                    String bodyName = "__terrain_" + key.tx + "_" + key.ty + "_" + key.tz;
-                    tile = new TileData(key, bodyName);
-                    tile.lastSeenStep = currentStep;
-                    rebuildTile(key, tile, chunk, bukkitWorld);
-                    activeTiles.put(key, tile);
-                } else if (tile.dirty) {
-                    tile.dirty = false;
-                    tile.lastSeenStep = currentStep;
-                    rebuildTile(key, tile, chunk, bukkitWorld);
+                    if (tile == null) {
+                        String bodyName = "__terrain_" + key.tx + "_" + key.ty + "_" + key.tz;
+                        tile = new TileData(key, bodyName);
+                        tile.lastSeenStep = currentStep;
+                        rebuildTile(key, tile, chunk, bukkitWorld);
+                        activeTiles.put(key, tile);
+                    } else if (tile.dirty) {
+                        tile.dirty = false;
+                        tile.lastSeenStep = currentStep;
+                        rebuildTile(key, tile, chunk, bukkitWorld);
+                    }
+                    failedTiles.remove(key);
+                } catch (Throwable t) {
+                    failedTiles.put(key, currentStep + TILE_RETRY_STEPS);
+                    logger.warning("Terrain tile " + key.worldId + " " + key.tx + "," + key.ty + "," + key.tz + " failed and will be retried later: " + t.getMessage());
                 }
             }
 
             if (currentStep % 200 == 0) {
+                failedTiles.values().removeIf(retryAt -> retryAt < currentStep - 2000);
                 Iterator<Map.Entry<TileKey, TileData>> it = activeTiles.entrySet().iterator();
                 while (it.hasNext()) {
                     Map.Entry<TileKey, TileData> entry = it.next();

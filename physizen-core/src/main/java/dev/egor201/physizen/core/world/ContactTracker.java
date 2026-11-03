@@ -203,6 +203,20 @@ final class ContactTracker extends CustomContactListener {
         return out;
     }
 
+    List<PhysBody> touching(PhysBody body) {
+        List<PhysBody> out = new ArrayList<>();
+        for (Pair pair : pairs.values()) {
+            if (pair.sensor != null) {
+                continue;
+            }
+            PhysBody other = pair.first == body ? pair.second : pair.second == body ? pair.first : null;
+            if (other != null && !other.def.internal && !other.isRemoved()) {
+                out.add(other);
+            }
+        }
+        return out;
+    }
+
     void purge(PhysBody body) {
         for (Map.Entry<Long, Pair> entry : new ArrayList<>(pairs.entrySet())) {
             Pair pair = entry.getValue();

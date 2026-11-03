@@ -12,6 +12,7 @@ import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
 import com.denizenscript.denizencore.utilities.debugging.Debug;
 import dev.egor201.physizen.bukkit.PhysizenServices;
 import dev.egor201.physizen.denizen.DenizenServices;
+import dev.egor201.physizen.denizen.save.PrefabFiles;
 import dev.egor201.physizen.denizen.save.SaveManager;
 import dev.egor201.physizen.core.world.PhysBody;
 import dev.egor201.physizen.core.world.PhysEngine;
@@ -199,7 +200,7 @@ public class PhysWorldCommand extends AbstractCommand {
                         }
                     }
                     MapTag root = SaveManager.serializePrefab(id, bodyNames);
-                    SaveManager.saveToFile(root, fileName);
+                    PrefabFiles.saveToFile(root, fileName);
                     break;
                 }
                 case "load": {
@@ -208,7 +209,7 @@ public class PhysWorldCommand extends AbstractCommand {
                         return;
                     }
                     String fileName = scriptEntry.getElement("file").asString();
-                    MapTag root = SaveManager.loadFromFile(fileName);
+                    MapTag root = PrefabFiles.loadFromFile(fileName);
                     SaveManager.spawnPrefab(id, root, null, null, "", null);
                     break;
                 }

@@ -117,6 +117,9 @@ public final class WorldQueries {
         List<QueryHit> out = new ArrayList<>();
         world.queryLock.readLock().lock();
         try {
+            if (world.destroyed()) {
+                return new ArrayList<>();
+            }
             RRayCast ray = new RRayCast(new RVec3(from[0], from[1], from[2]), new Vec3((float) (u[0] * max), (float) (u[1] * max), (float) (u[2] * max)));
             AllHitCastRayCollector collector = new AllHitCastRayCollector();
             world.system.getNarrowPhaseQuery().castRay(ray, new RayCastSettings(), collector, new BroadPhaseLayerFilter(), new ObjectLayerFilter(), bodyFilter(f));
@@ -152,6 +155,9 @@ public final class WorldQueries {
         ShapeRefC shape = ShapeBuilder.build(spec);
         world.queryLock.readLock().lock();
         try {
+            if (world.destroyed()) {
+                return new ArrayList<>();
+            }
             RShapeCast cast = new RShapeCast(shape, new Vec3(1f, 1f, 1f), transform(from, rot), new Vec3((float) (u[0] * max), (float) (u[1] * max), (float) (u[2] * max)));
             AllHitCastShapeCollector collector = new AllHitCastShapeCollector();
             world.system.getNarrowPhaseQuery().castShape(cast, new ShapeCastSettings(), new RVec3(from[0], from[1], from[2]), collector, new BroadPhaseLayerFilter(), new ObjectLayerFilter(), bodyFilter(f));
@@ -188,6 +194,9 @@ public final class WorldQueries {
         Map<Integer, QueryHit> best = new LinkedHashMap<>();
         world.queryLock.readLock().lock();
         try {
+            if (world.destroyed()) {
+                return new ArrayList<>();
+            }
             AllHitCollideShapeCollector collector = new AllHitCollideShapeCollector();
             world.system.getNarrowPhaseQuery().collideShape(shape, new Vec3(1f, 1f, 1f), transform(pos, rot), new CollideShapeSettings(), new RVec3(pos[0], pos[1], pos[2]), collector, new BroadPhaseLayerFilter(), new ObjectLayerFilter(), bodyFilter(f));
             for (CollideShapeResult r : collector.getHits()) {

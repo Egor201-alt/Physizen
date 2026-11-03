@@ -5,6 +5,7 @@ import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizencore.objects.Fetchable;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
+import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
@@ -238,6 +239,117 @@ public class PhysCharacterTag implements ObjectTag {
             UUID owner = PhysizenServices.get().controllers.ownerOf(object.worldId, object.name);
             if (owner == null) return null;
             return new PlayerTag(owner);
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.speed>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the full speed of this character.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "speed", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            return new ElementTag(c.state.speed());
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.horizontal_speed>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the speed of this character on the horizontal plane.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "horizontal_speed", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            CharacterState s = c.state;
+            return new ElementTag(Math.sqrt(s.vx * s.vx + s.vz * s.vz));
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.is_falling>
+        // @returns ElementTag(Boolean)
+        // @description
+        // Returns whether this character is in the air and moving downwards.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "is_falling", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            CharacterState s = c.state;
+            return new ElementTag(s.ground == CharacterState.Ground.IN_AIR && s.vy < -0.01);
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.is_rising>
+        // @returns ElementTag(Boolean)
+        // @description
+        // Returns whether this character is in the air and moving upwards (for example during a jump).
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "is_rising", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            CharacterState s = c.state;
+            return new ElementTag(s.ground == CharacterState.Ground.IN_AIR && s.vy > 0.01);
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.is_tracking>
+        // @returns ElementTag(Boolean)
+        // @description
+        // Returns whether this character follows a player (mode TRACK) instead of being driven by scripts.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "is_tracking", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            return new ElementTag(c.def.mode == dev.egor201.physizen.core.model.CharacterDef.Mode.TRACK);
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.mass>
+        // @returns ElementTag(Decimal)
+        // @description
+        // Returns the mass used when this character pushes bodies.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "mass", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            return new ElementTag(c.def.mass);
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.shape>
+        // @returns ElementTag
+        // @description
+        // Returns a short description of the character's shape, for example capsule[h=1.800,r=0.300].
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "shape", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null) return null;
+            return new ElementTag(c.def.shape.describe());
+        });
+
+        // <--[tag]
+        // @attribute <PhysCharacterTag.sensors>
+        // @returns ListTag(PhysBodyTag)
+        // @description
+        // Returns the sensor zones this character is currently inside. Needs inner_body:true.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "sensors", (attribute, object) -> {
+            PhysCharacter c = object.character();
+            if (c == null || c.body() == null) return null;
+            ListTag list = new ListTag();
+            for (dev.egor201.physizen.core.world.PhysBody zone : c.body().sensorsHolding()) {
+                list.addObject(new PhysBodyTag(object.worldId, zone.name));
+            }
+            return list;
         });
 
         // <--[tag]

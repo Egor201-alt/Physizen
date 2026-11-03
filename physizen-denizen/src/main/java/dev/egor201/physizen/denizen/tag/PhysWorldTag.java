@@ -15,6 +15,7 @@ import com.denizenscript.denizencore.utilities.CoreUtilities;
 import dev.egor201.physizen.core.model.ConstraintDef;
 import dev.egor201.physizen.core.model.FieldDef;
 import dev.egor201.physizen.core.world.PhysBody;
+import dev.egor201.physizen.core.world.PhysCharacter;
 import dev.egor201.physizen.core.world.PhysEngine;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.world.PhysWorld;
@@ -385,6 +386,94 @@ public class PhysWorldTag implements ObjectTag {
         });
 
         // <--[tag]
+        // @attribute <PhysWorldTag.characters>
+        // @returns ListTag(PhysCharacterTag)
+        // @description
+        // Returns all character controllers in this world.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "characters", (attribute, object) -> {
+            ListTag list = new ListTag();
+            for (PhysCharacter c : need(object).characters()) {
+                list.addObject(new PhysCharacterTag(object.id, c.name));
+            }
+            return list;
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.character[<name>]>
+        // @returns PhysCharacterTag
+        // @description
+        // Returns the character controller with the given name, or null if there is none.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(PhysCharacterTag.class, ElementTag.class, "character", (attribute, object, param) -> {
+            PhysCharacter c = need(object).character(param.asString());
+            if (c == null) return null;
+            return new PhysCharacterTag(object.id, c.name);
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.sensors>
+        // @returns ListTag(PhysBodyTag)
+        // @description
+        // Returns all sensor zones in this world.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "sensors", (attribute, object) -> {
+            ListTag list = new ListTag();
+            for (PhysBody body : need(object).sensors()) {
+                list.addObject(new PhysBodyTag(object.id, body.name));
+            }
+            return list;
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.bodies_with_tag[<text>]>
+        // @returns ListTag(PhysBodyTag)
+        // @description
+        // Returns all bodies whose tag text (the tag: argument of physbody create) equals the given text.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "bodies_with_tag", (attribute, object, param) -> {
+            String wanted = param.asString();
+            ListTag list = new ListTag();
+            for (PhysBody body : need(object).bodies()) {
+                if (wanted.equals(body.tag)) {
+                    list.addObject(new PhysBodyTag(object.id, body.name));
+                }
+            }
+            return list;
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.active_body_count>
+        // @returns ElementTag(Number)
+        // @description
+        // Returns how many bodies are awake in the last simulated step.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "active_body_count", (attribute, object) -> new ElementTag(need(object).activeBodyCount()));
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.dropped_events>
+        // @returns ElementTag(Number)
+        // @description
+        // Returns how many physics events were dropped because the event queue was full (see contact_event_queue_limit). A non-zero value means scripts are missing events.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "dropped_events", (attribute, object) -> new ElementTag(need(object).droppedEvents()));
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.pending_events>
+        // @returns ElementTag(Number)
+        // @description
+        // Returns how many physics events are waiting to be delivered to scripts.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ElementTag.class, "pending_events", (attribute, object) -> new ElementTag(need(object).pendingEvents()));
+
+        // <--[tag]
         // @attribute <PhysWorldTag.bodies_in_radius[<center>|<radius>]>
         // @returns ListTag(PhysBodyTag)
         // @description
@@ -596,7 +685,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, "saved_prefabs", (attribute, object) -> {
-            return new ListTag(dev.egor201.physizen.denizen.save.SaveManager.listSavedFiles());
+            return new ListTag(dev.egor201.physizen.denizen.save.PrefabFiles.listSavedFiles());
         });
     }
 }
