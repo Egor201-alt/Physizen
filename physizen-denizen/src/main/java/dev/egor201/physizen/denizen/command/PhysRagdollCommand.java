@@ -15,22 +15,25 @@ import dev.egor201.physizen.core.world.PhysWorld;
 import dev.egor201.physizen.core.world.RagdollBuilder;
 import dev.egor201.physizen.core.world.RagdollSpec;
 import dev.egor201.physizen.denizen.args.Args;
+import com.denizenscript.denizen.objects.EntityTag;
+import dev.egor201.physizen.bukkit.PhysizenServices;
 import dev.egor201.physizen.denizen.args.ShapeParser;
+import java.util.List;
 
 // <--[command]
 // @Name physragdoll
-// @Syntax physragdoll [create/remove] (world:<world>) name:<name> (preset:<humanoid>) (bones:<list of maps>) (position:<loc>) (rotation:<rotation>) (scale:<number>) (mass:<number>) (velocity:<vec>) (friction:<number>) (restitution:<number>) (linear_damping:<number>) (angular_damping:<number>) (group:<0-15>) (joint_friction:<number>)
+// @Syntax physragdoll [create/remove/bind/unbind] (world:<world>) name:<name> (preset:<humanoid>) (bones:<list of maps>) (position:<loc>) (rotation:<rotation>) (scale:<number>) (mass:<number>) (velocity:<vec>) (friction:<number>) (restitution:<number>) (linear_damping:<number>) (angular_damping:<number>) (group:<0-15>) (joint_friction:<number>) (entities:<map of bone to entity>) (offset:<vec>) (scale:<vec>) (rotation_offset:<rotation>) (interpolation:<ticks>) (teleport_duration:<ticks>) (remove_with_body:<boolean>)
 // @Required 2
-// @Maximum 16
-// @Short Creates or removes a ragdoll made of bodies connected by swing-twist joints.
+// @Maximum 24
+// @Short Creates or removes a ragdoll made of bodies connected by swing-twist joints, or binds display entities to its bones.
 // @Group Physizen
 // -->
 public class PhysRagdollCommand extends AbstractCommand {
 
     public PhysRagdollCommand() {
         setName("physragdoll");
-        setSyntax("physragdoll [create/remove] (world:<world>) name:<name> (preset:<humanoid>) (bones:<list of maps>) (position:<loc>) (rotation:<rotation>) (scale:<number>) (mass:<number>) (velocity:<vec>) (friction:<number>) (restitution:<number>) (linear_damping:<number>) (angular_damping:<number>) (group:<0-15>) (joint_friction:<number>)");
-        setRequiredArguments(2, 16);
+        setSyntax("physragdoll [create/remove/bind/unbind] (world:<world>) name:<name> (preset:<humanoid>) (bones:<list of maps>) (position:<loc>) (rotation:<rotation>) (scale:<number>) (mass:<number>) (velocity:<vec>) (friction:<number>) (restitution:<number>) (linear_damping:<number>) (angular_damping:<number>) (group:<0-15>) (joint_friction:<number>) (entities:<map of bone to entity>) (offset:<vec>) (scale:<vec>) (rotation_offset:<rotation>) (interpolation:<ticks>) (teleport_duration:<ticks>) (remove_with_body:<boolean>)");
+        setRequiredArguments(2, 24);
         isProcedural = false;
     }
 
@@ -107,12 +110,39 @@ public class PhysRagdollCommand extends AbstractCommand {
                 w.removeRagdoll(nameTag.asString());
                 return;
             }
+            if (act.equals("unbind")) {
+                for (String part : w.ragdollParts(nameTag.asString())) {
+                    PhysizenServices.get().displays.unbindAll(worldId, part);
+                }
+                return;
+            }
+            if (act.equals("bind")) {
+                if (!scriptEntry.hasObject("entities")) {
+                    throw new PhysException("physragdoll bind needs entities:<map of bone to entity>.");
+                }
+                MapTag map = ((ObjectTag) scriptEntry.getObjectTag("entities")).asType(MapTag.class, scriptEntry.context);
+                if (map == null || map.map.isEmpty()) {
+                    throw new PhysException("entities must be a non-empty map of bone to entity.");
+                }
+                List<String> parts = w.ragdollParts(nameTag.asString());
+                for (Object keyTag : map.map.keySet()) {
+                    String bone = keyTag.toString();
+                    String part = RagdollBuilder.partName(nameTag.asString(), bone);
+                    if (!parts.contains(part)) {
+                        throw new PhysException("Ragdoll '" + nameTag.asString() + "' has no bone '" + bone + "'.");
+                    }
+                    for (EntityTag et : Args.entities(map.getObject(bone), scriptEntry.context)) {
+                        PhysizenServices.get().displays.bind(worldId, part, BindingArgs.create(et, scriptEntry));
+                    }
+                }
+                return;
+            }
             if (!act.equals("create")) {
-                throw new PhysException("Unknown physragdoll action '" + act + "', expected create or remove.");
+                throw new PhysException("Unknown physragdoll action '" + act + "', expected create, remove, bind or unbind.");
             }
             RagdollSpec spec;
             if (scriptEntry.hasObject("bones")) {
-                ListTag bones = scriptEntry.getObjectTag("bones").asType(ListTag.class, scriptEntry.context);
+                ListTag bones = ((ObjectTag) scriptEntry.getObjectTag("bones")).asType(ListTag.class, scriptEntry.context);
                 if (bones == null || bones.isEmpty()) {
                     throw new PhysException("bones must be a non-empty list of maps.");
                 }
