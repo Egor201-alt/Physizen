@@ -35,7 +35,9 @@ final class ContactTracker extends CustomContactListener {
     private final PhysWorld world;
     private final EngineConfig config;
     private final EventQueue events;
+    private static final int DERIVED_COOLDOWN_STEPS = 12;
     private final ConcurrentHashMap<Long, Pair> pairs = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<Long, Long> lastDerived = new ConcurrentHashMap<>();
 
     ContactTracker(PhysWorld world, EngineConfig config, EventQueue events) {
         this.world = world;
@@ -73,6 +75,7 @@ final class ContactTracker extends CustomContactListener {
                 sensorAdded(p1.def.sensor ? p1 : p2, p1.def.sensor ? p2 : p1, key(b1.getId(), b2.getId()), speed, depth);
                 return;
             }
+            derived(b1, b2, p1, p2, n12, depth, speed);
             if (!p1.def.notify && !p2.def.notify) {
                 return;
             }
@@ -80,8 +83,9 @@ final class ContactTracker extends CustomContactListener {
             if (pair.count.incrementAndGet() != 1 || speed < config.contactMinSpeed) {
                 return;
             }
-            emitContact(PhysEvent.Kind.COLLIDE, p1, p2, n12, depth, speed);
-            emitContact(PhysEvent.Kind.COLLIDE, p2, p1, n12 == null ? null : ContactGeometry.negate(n12), depth, speed);
+            double[] exact = ContactPoints.between(b1, b2);
+            emitContact(PhysEvent.Kind.COLLIDE, p1, p2, n12, depth, speed, exact);
+            emitContact(PhysEvent.Kind.COLLIDE, p2, p1, n12 == null ? null : ContactGeometry.negate(n12), depth, speed, exact);
         }
         catch (Throwable ignored) {
         }
@@ -118,11 +122,12 @@ final class ContactTracker extends CustomContactListener {
             Vec3 v1 = b1.getLinearVelocity();
             Vec3 v2 = b2.getLinearVelocity();
             double speed = Math.sqrt(Math.pow(v1.getX() - v2.getX(), 2) + Math.pow(v1.getY() - v2.getY(), 2) + Math.pow(v1.getZ() - v2.getZ(), 2));
+            double[] exact = ContactPoints.between(b1, b2);
             if (p1.def.notifyPersist) {
-                emitContact(PhysEvent.Kind.CONTACT_PERSISTED, p1, p2, n12, depth, speed);
+                emitContact(PhysEvent.Kind.CONTACT_PERSISTED, p1, p2, n12, depth, speed, exact);
             }
             if (p2.def.notifyPersist) {
-                emitContact(PhysEvent.Kind.CONTACT_PERSISTED, p2, p1, n12 == null ? null : ContactGeometry.negate(n12), depth, speed);
+                emitContact(PhysEvent.Kind.CONTACT_PERSISTED, p2, p1, n12 == null ? null : ContactGeometry.negate(n12), depth, speed, exact);
             }
         }
         catch (Throwable ignored) {
@@ -146,6 +151,62 @@ final class ContactTracker extends CustomContactListener {
         }
     }
 
+    private void derived(Body b1, Body b2, PhysBody p1, PhysBody p2, double[] n12, double depth, double speed) {
+        if (p1.def.internal && p2.def.internal) {
+            return;
+        }
+        boolean r1 = p1.def.ragdoll != null && !p1.def.ragdoll.isEmpty();
+        boolean r2 = p2.def.ragdoll != null && !p2.def.ragdoll.isEmpty();
+        if (r1 && r2 && p1.def.ragdoll.equals(p2.def.ragdoll)) {
+            return;
+        }
+        String v1 = world.vehicleService.vehicleOfBody(p1.name);
+        String v2 = world.vehicleService.vehicleOfBody(p2.name);
+        boolean ragdollHit = (r1 || r2) && speed >= config.ragdollHitMinSpeed;
+        boolean vehicleHit = (v1 != null || v2 != null) && speed >= config.vehicleHitMinSpeed;
+        if (!ragdollHit && !vehicleHit) {
+            return;
+        }
+        long step = world.stepCount();
+        Long last = lastDerived.get(key(b1.getId(), b2.getId()));
+        if (last != null && step - last < DERIVED_COOLDOWN_STEPS) {
+            return;
+        }
+        if (lastDerived.size() > 4096) {
+            lastDerived.clear();
+        }
+        lastDerived.put(key(b1.getId(), b2.getId()), step);
+        double[] point = ContactPoints.between(b1, b2);
+        double[] n21 = n12 == null ? null : ContactGeometry.negate(n12);
+        if (ragdollHit) {
+            if (r1) {
+                emitDerived(PhysEvent.Kind.RAGDOLL_HIT, p1.def.ragdoll, p1, p2, n12, point, depth, speed);
+            }
+            if (r2) {
+                emitDerived(PhysEvent.Kind.RAGDOLL_HIT, p2.def.ragdoll, p2, p1, n21, point, depth, speed);
+            }
+        }
+        if (vehicleHit) {
+            if (v1 != null) {
+                emitDerived(PhysEvent.Kind.VEHICLE_HIT, v1, p1, p2, n12, point, depth, speed);
+            }
+            if (v2 != null) {
+                emitDerived(PhysEvent.Kind.VEHICLE_HIT, v2, p2, p1, n21, point, depth, speed);
+            }
+        }
+    }
+
+    private void emitDerived(PhysEvent.Kind kind, String owner, PhysBody self, PhysBody other, double[] normalSelfToOther, double[] point, double depth, double speed) {
+        if (self.def.internal) {
+            return;
+        }
+        boolean terrain = other.def.internal;
+        Snapshot s = self.snapshot;
+        double[] normal = normalSelfToOther == null ? ContactGeometry.fallbackNormal(s, other.snapshot, terrain) : ContactGeometry.negate(normalSelfToOther);
+        double[] p = point != null ? point : terrain ? ContactGeometry.boundaryPoint(s, ContactGeometry.negate(normal)) : ContactGeometry.overlapPoint(s, other.snapshot);
+        events.offer(new PhysEvent(kind, world, self, terrain ? null : other, p, normal, speed, depth).withOwner(owner));
+    }
+
     private void sensorAdded(PhysBody sensor, PhysBody occupant, long key, double speed, double depth) {
         if (occupant.def.internal) {
             return;
@@ -163,15 +224,15 @@ final class ContactTracker extends CustomContactListener {
             }
             return;
         }
-        emitContact(PhysEvent.Kind.CONTACT_REMOVED, pair.first, pair.second, null, 0, 0);
-        emitContact(PhysEvent.Kind.CONTACT_REMOVED, pair.second, pair.first, null, 0, 0);
+        emitContact(PhysEvent.Kind.CONTACT_REMOVED, pair.first, pair.second, null, 0, 0, null);
+        emitContact(PhysEvent.Kind.CONTACT_REMOVED, pair.second, pair.first, null, 0, 0, null);
     }
 
     private static double[] midpoint(PhysBody a, PhysBody b) {
         return ContactGeometry.overlapPoint(a.snapshot, b.snapshot);
     }
 
-    private void emitContact(PhysEvent.Kind kind, PhysBody self, PhysBody other, double[] normalSelfToOther, double depth, double speed) {
+    private void emitContact(PhysEvent.Kind kind, PhysBody self, PhysBody other, double[] normalSelfToOther, double depth, double speed, double[] exactPoint) {
         boolean wants = kind == PhysEvent.Kind.CONTACT_PERSISTED ? self.def.notifyPersist : self.def.notify;
         if (!wants || self.def.internal) {
             return;
@@ -179,7 +240,7 @@ final class ContactTracker extends CustomContactListener {
         boolean terrain = other.def.internal;
         Snapshot s = self.snapshot;
         double[] normal = normalSelfToOther == null ? ContactGeometry.fallbackNormal(s, other.snapshot, terrain) : ContactGeometry.negate(normalSelfToOther);
-        double[] point = terrain ? ContactGeometry.boundaryPoint(s, ContactGeometry.negate(normal)) : ContactGeometry.overlapPoint(s, other.snapshot);
+        double[] point = exactPoint != null ? exactPoint : terrain ? ContactGeometry.boundaryPoint(s, ContactGeometry.negate(normal)) : ContactGeometry.overlapPoint(s, other.snapshot);
         events.offer(new PhysEvent(kind, world, self, terrain ? null : other, point, normal, speed, depth));
     }
 
@@ -228,5 +289,6 @@ final class ContactTracker extends CustomContactListener {
 
     void clear() {
         pairs.clear();
+        lastDerived.clear();
     }
 }

@@ -258,6 +258,15 @@ final class VehicleService {
         entry.controller = null;
     }
 
+    String vehicleOfBody(String bodyName) {
+        for (Entry e : entries.values()) {
+            if (e.def.body.equals(bodyName) && !e.removed) {
+                return e.def.name;
+            }
+        }
+        return null;
+    }
+
     void removeForBody(String bodyName) {
         for (Entry e : new ArrayList<>(entries.values())) {
             if (e.def.body.equals(bodyName)) {

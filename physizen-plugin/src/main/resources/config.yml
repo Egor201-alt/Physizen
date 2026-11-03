@@ -26,6 +26,10 @@ fall_out_y: -128.0
 
 # Minimum impact velocity (m/s) to trigger a contact event in scripts
 contact_min_speed: 0.5
+# Minimum relative speed for the "physragdoll hit" event
+ragdoll_hit_min_speed: 2.0
+# Minimum relative speed for the "physvehicle crash" event
+vehicle_hit_min_speed: 3.0
 
 # Every N physics steps, 'physbody contact persisted' fires for bodies created with notify_persist:true (0 = never)
 contact_persist_interval_steps: 6

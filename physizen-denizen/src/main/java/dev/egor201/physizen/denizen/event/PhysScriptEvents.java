@@ -34,6 +34,7 @@ public final class PhysScriptEvents {
         public ElementTag speed;
         public ElementTag depth;
         public PlayerTag player;
+        public ElementTag owner;
 
         @Override
         public boolean matches(ScriptPath path) {
@@ -59,6 +60,10 @@ public final class PhysScriptEvents {
                     return speed;
                 case "depth":
                     return depth;
+                case "ragdoll":
+                case "vehicle":
+                case "constraint":
+                    return owner;
                 case "player":
                     return player;
                 case "is_player":
@@ -82,7 +87,7 @@ public final class PhysScriptEvents {
     // @Context
     // <context.body> returns the PhysBodyTag that has notify enabled.
     // <context.other> returns the other PhysBodyTag, or an ElementTag 'terrain'.
-    // <context.point> returns the approximate contact point as a LocationTag.
+    // <context.point> returns the contact point as a LocationTag, computed from the real shape overlap.
     // <context.normal> returns the real contact normal, pointing from the other body towards <context.body>.
     // <context.speed> returns the relative speed.
     // <context.depth> returns the penetration depth.
@@ -108,7 +113,7 @@ public final class PhysScriptEvents {
     // @Context
     // <context.body> returns the PhysBodyTag that has notify_persist enabled.
     // <context.other> returns the other PhysBodyTag, or an ElementTag 'terrain'.
-    // <context.point> returns the approximate contact point as a LocationTag.
+    // <context.point> returns the contact point as a LocationTag, computed from the real shape overlap.
     // <context.normal> returns the contact normal, pointing from the other body towards <context.body>.
     // <context.speed> returns the relative speed.
     // <context.depth> returns the penetration depth.
@@ -283,6 +288,84 @@ public final class PhysScriptEvents {
         }
     }
 
+    // <--[event]
+    // @Events
+    // physragdoll hit
+    //
+    // @Group Physizen
+    //
+    // @Cancellable false
+    //
+    // @Triggers when a bone of a ragdoll touches something else at a relative speed of at least ragdoll_hit_min_speed. Bones of the same ragdoll never trigger it.
+    //
+    // @Context
+    // <context.body> returns the PhysBodyTag that was hit (the ragdoll bone or the vehicle chassis).
+    // <context.other> returns the other PhysBodyTag, or an ElementTag 'terrain'.
+    // <context.point> returns the contact point as a LocationTag.
+    // <context.normal> returns the real contact normal, pointing from the other body towards <context.body>.
+    // <context.speed> returns the relative speed.
+    // <context.depth> returns the penetration depth.
+    // <context.ragdoll> returns the ragdoll id as an ElementTag.
+    // <context.world> returns the PhysWorldTag.
+    // -->
+    public static final class RagdollHit extends BaseEvent {
+
+        public RagdollHit() {
+            registerCouldMatcher("physragdoll hit");
+        }
+    }
+
+    // <--[event]
+    // @Events
+    // physvehicle crash
+    //
+    // @Group Physizen
+    //
+    // @Cancellable false
+    //
+    // @Triggers when the chassis of a vehicle touches something else at a relative speed of at least vehicle_hit_min_speed.
+    //
+    // @Context
+    // <context.body> returns the PhysBodyTag that was hit (the ragdoll bone or the vehicle chassis).
+    // <context.other> returns the other PhysBodyTag, or an ElementTag 'terrain'.
+    // <context.point> returns the contact point as a LocationTag.
+    // <context.normal> returns the real contact normal, pointing from the other body towards <context.body>.
+    // <context.speed> returns the relative speed.
+    // <context.depth> returns the penetration depth.
+    // <context.vehicle> returns the vehicle name as an ElementTag.
+    // <context.world> returns the PhysWorldTag.
+    // -->
+    public static final class VehicleCrash extends BaseEvent {
+
+        public VehicleCrash() {
+            registerCouldMatcher("physvehicle crash");
+        }
+    }
+
+    // <--[event]
+    // @Events
+    // physconstraint breaks
+    //
+    // @Group Physizen
+    //
+    // @Cancellable false
+    //
+    // @Triggers when a constraint created with break_distance is stretched past that distance. The constraint is removed.
+    //
+    // @Context
+    // <context.body> returns the first PhysBodyTag of the constraint.
+    // <context.other> returns the second PhysBodyTag, if the constraint had one.
+    // <context.point> returns the middle of the two stretched anchors as a LocationTag.
+    // <context.constraint> returns the constraint name as an ElementTag.
+    // <context.world> returns the PhysWorldTag.
+    // -->
+    public static final class ConstraintBreak extends BaseEvent {
+
+        public ConstraintBreak() {
+            registerCouldMatcher("physconstraint breaks");
+        }
+    }
+
     public static void registerAll() {
         register(PhysEvent.Kind.COLLIDE, new Collides());
         register(PhysEvent.Kind.CONTACT_PERSISTED, new ContactPersisted());
@@ -293,6 +376,9 @@ public final class PhysScriptEvents {
         register(PhysEvent.Kind.SLEEP, new Sleeps());
         register(PhysEvent.Kind.WAKE, new Wakes());
         register(PhysEvent.Kind.FALL_OUT, new FallsOut());
+        register(PhysEvent.Kind.RAGDOLL_HIT, new RagdollHit());
+        register(PhysEvent.Kind.VEHICLE_HIT, new VehicleCrash());
+        register(PhysEvent.Kind.CONSTRAINT_BREAK, new ConstraintBreak());
     }
 
     private static void register(PhysEvent.Kind kind, BaseEvent event) {
@@ -314,6 +400,7 @@ public final class PhysScriptEvents {
         event.speed = null;
         event.depth = null;
         event.player = null;
+        event.owner = null;
         boolean sensorEvent = e.kind == PhysEvent.Kind.SENSOR_ENTER || e.kind == PhysEvent.Kind.SENSOR_EXIT || e.kind == PhysEvent.Kind.SENSOR_STAY;
         if (sensorEvent) {
             event.sensor = new PhysBodyTag(worldId, e.body.name);
@@ -322,12 +409,13 @@ public final class PhysScriptEvents {
         }
         else {
             event.body = new PhysBodyTag(worldId, e.body.name);
-            event.other = e.other != null ? new PhysBodyTag(worldId, e.other.name) : new ElementTag("terrain");
+            event.other = e.other != null ? new PhysBodyTag(worldId, e.other.name) : e.kind == PhysEvent.Kind.CONSTRAINT_BREAK ? null : new ElementTag("terrain");
             event.normal = e.normal != null ? new LocationTag(bukkitWorld, e.normal[0], e.normal[1], e.normal[2]) : null;
             event.depth = new ElementTag(e.depth);
         }
         event.point = e.point != null ? new LocationTag(bukkitWorld, e.point[0], e.point[1], e.point[2]) : null;
         event.speed = new ElementTag(e.speed);
+        event.owner = e.owner != null ? new ElementTag(e.owner) : null;
         event.fire();
     }
 

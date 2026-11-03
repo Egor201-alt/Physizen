@@ -11,7 +11,10 @@ public final class PhysEvent {
         SENSOR_STAY,
         WAKE,
         SLEEP,
-        FALL_OUT
+        FALL_OUT,
+        RAGDOLL_HIT,
+        VEHICLE_HIT,
+        CONSTRAINT_BREAK
     }
 
     public final Kind kind;
@@ -22,6 +25,7 @@ public final class PhysEvent {
     public final double[] normal;
     public final double speed;
     public final double depth;
+    public String owner;
 
     public PhysEvent(Kind kind, PhysWorld world, PhysBody body, PhysBody other, double[] point, double[] normal, double speed, double depth) {
         this.kind = kind;
@@ -36,5 +40,10 @@ public final class PhysEvent {
 
     public PhysEvent(Kind kind, PhysWorld world, PhysBody body, PhysBody other, double[] point, double[] normal, double speed) {
         this(kind, world, body, other, point, normal, speed, 0);
+    }
+
+    public PhysEvent withOwner(String owner) {
+        this.owner = owner;
+        return this;
     }
 }

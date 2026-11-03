@@ -114,6 +114,7 @@ final class StepLoop {
         stepCount++;
         publishAll();
         world.vehicleService.publish();
+        world.checkConstraintBreaks();
         lastStepNanos = System.nanoTime() - start;
     }
 

@@ -241,6 +241,57 @@ public class DisplayBinder {
         }
     }
 
+    public void applyPose(Binding b, Location bodyLoc, Quaternionf bodyRot) {
+        if (b.entity instanceof Display) {
+            Display d = (Display) b.entity;
+
+            Quaternionf totalRot = new Quaternionf(bodyRot).mul(b.rotationOffset);
+
+            float dot = b.lastAppliedRot.x * totalRot.x + b.lastAppliedRot.y * totalRot.y
+                      + b.lastAppliedRot.z * totalRot.z + b.lastAppliedRot.w * totalRot.w;
+            if (dot < 0) {
+                totalRot.x = -totalRot.x;
+                totalRot.y = -totalRot.y;
+                totalRot.z = -totalRot.z;
+                totalRot.w = -totalRot.w;
+            }
+            b.lastAppliedRot.set(totalRot);
+
+            boolean rotChanged = Float.isNaN(b.lastSentRot.x)
+                    || Math.abs(totalRot.x - b.lastSentRot.x) > 0.0005f
+                    || Math.abs(totalRot.y - b.lastSentRot.y) > 0.0005f
+                    || Math.abs(totalRot.z - b.lastSentRot.z) > 0.0005f
+                    || Math.abs(totalRot.w - b.lastSentRot.w) > 0.0005f;
+
+            if (rotChanged) {
+                b.lastSentRot.set(totalRot);
+
+                Vector3f translation = new Vector3f();
+                if (d instanceof BlockDisplay) {
+                    Vector3f halfScale = new Vector3f(b.scale).mul(0.5f);
+                    Vector3f rotatedHalf = totalRot.transform(halfScale, new Vector3f());
+                    Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset), new Vector3f());
+                    translation.set(worldOffset).sub(rotatedHalf);
+                } else {
+                    translation.set(bodyRot.transform(new Vector3f(b.offset), new Vector3f()));
+                }
+
+                Transformation transform = new Transformation(translation, totalRot, b.scale, new Quaternionf());
+
+                d.setInterpolationDelay(b.interpolationStart);
+                d.setInterpolationDuration(b.interpolationDuration);
+                d.setTransformation(transform);
+            }
+
+            d.setTeleportDuration(b.teleportDuration);
+            d.teleport(bodyLoc);
+        } else {
+            Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset));
+            Location target = bodyLoc.clone().add(worldOffset.x, worldOffset.y, worldOffset.z);
+            b.entity.teleport(target);
+        }
+    }
+
     public void tick() {
         PhysEngine engine = PhysEngine.get();
         if (engine == null) return;
@@ -293,59 +344,7 @@ public class DisplayBinder {
                         continue;
                     }
 
-                    if (b.entity instanceof Display) {
-                        Display d = (Display) b.entity;
-
-                        Quaternionf totalRot = new Quaternionf(bodyRot).mul(b.rotationOffset);
-
-                        float dot = b.lastAppliedRot.x * totalRot.x + b.lastAppliedRot.y * totalRot.y 
-                                  + b.lastAppliedRot.z * totalRot.z + b.lastAppliedRot.w * totalRot.w;
-                        if (dot < 0) {
-                            totalRot.x = -totalRot.x;
-                            totalRot.y = -totalRot.y;
-                            totalRot.z = -totalRot.z;
-                            totalRot.w = -totalRot.w;
-                        }
-                        b.lastAppliedRot.set(totalRot);
-
-                        boolean rotChanged = Float.isNaN(b.lastSentRot.x) 
-                                || Math.abs(totalRot.x - b.lastSentRot.x) > 0.0005f
-                                || Math.abs(totalRot.y - b.lastSentRot.y) > 0.0005f
-                                || Math.abs(totalRot.z - b.lastSentRot.z) > 0.0005f
-                                || Math.abs(totalRot.w - b.lastSentRot.w) > 0.0005f;
-
-                        if (rotChanged) {
-                            b.lastSentRot.set(totalRot);
-
-                            Vector3f translation = new Vector3f();
-                            if (d instanceof BlockDisplay) {
-                                Vector3f halfScale = new Vector3f(b.scale).mul(0.5f);
-                                Vector3f rotatedHalf = totalRot.transform(halfScale, new Vector3f());
-                                Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset), new Vector3f());
-                                translation.set(worldOffset).sub(rotatedHalf);
-                            } else {
-                                translation.set(bodyRot.transform(new Vector3f(b.offset), new Vector3f()));
-                            }
-
-                            Transformation transform = new Transformation(
-                                    translation,
-                                    totalRot,
-                                    b.scale,
-                                    new Quaternionf()
-                            );
-
-                            d.setInterpolationDelay(b.interpolationStart);
-                            d.setInterpolationDuration(b.interpolationDuration);
-                            d.setTransformation(transform);
-                        }
-
-                        d.setTeleportDuration(b.teleportDuration);
-                        d.teleport(bodyLoc);
-                    } else {
-                        Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset));
-                        Location target = bodyLoc.clone().add(worldOffset.x, worldOffset.y, worldOffset.z);
-                        b.entity.teleport(target);
-                    }
+                    applyPose(b, bodyLoc, bodyRot);
                 }
             }
         }

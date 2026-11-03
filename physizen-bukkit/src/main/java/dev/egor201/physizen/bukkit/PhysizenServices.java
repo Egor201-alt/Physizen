@@ -2,6 +2,7 @@ package dev.egor201.physizen.bukkit;
 
 import dev.egor201.physizen.bukkit.character.PlayerControllerManager;
 import dev.egor201.physizen.bukkit.display.DisplayBinder;
+import dev.egor201.physizen.bukkit.display.WheelBinder;
 import dev.egor201.physizen.bukkit.hitbox.HitboxManager;
 import dev.egor201.physizen.bukkit.terrain.TerrainManager;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -13,6 +14,7 @@ public final class PhysizenServices {
     public final JavaPlugin plugin;
     public final WorldLinks worlds;
     public final DisplayBinder displays;
+    public final WheelBinder wheelDisplays;
     public final TerrainManager terrain;
     public final HitboxManager hitboxes;
     public final PlayerControllerManager controllers;
@@ -21,6 +23,7 @@ public final class PhysizenServices {
         this.plugin = plugin;
         this.worlds = new WorldLinks();
         this.displays = new DisplayBinder(worlds);
+        this.wheelDisplays = new WheelBinder(worlds, displays);
         this.terrain = new TerrainManager(worlds, plugin.getLogger());
         this.hitboxes = new HitboxManager(worlds, displays);
         this.controllers = new PlayerControllerManager(worlds);
@@ -53,10 +56,12 @@ public final class PhysizenServices {
         hitboxes.tick();
         controllers.tick();
         displays.tick();
+        wheelDisplays.tick();
     }
 
     public void shutdown() {
         hitboxes.clear();
         controllers.clear();
+        wheelDisplays.clear();
     }
 }

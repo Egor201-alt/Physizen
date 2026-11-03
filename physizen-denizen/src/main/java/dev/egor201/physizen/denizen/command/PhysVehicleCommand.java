@@ -12,21 +12,26 @@ import dev.egor201.physizen.core.model.VehicleDef;
 import dev.egor201.physizen.core.world.PhysBody;
 import dev.egor201.physizen.core.world.PhysWorld;
 import dev.egor201.physizen.denizen.args.Args;
+import com.denizenscript.denizen.objects.EntityTag;
+import dev.egor201.physizen.bukkit.PhysizenServices;
+import dev.egor201.physizen.bukkit.display.DisplayBinder;
+import java.util.ArrayList;
+import java.util.List;
 
 // <--[command]
 // @Name physvehicle
-// @Syntax physvehicle [create/remove/input] (world:<world>) name:<name> (body:<chassis body>) (drive:<front/rear/all>) (forward:<vec>) (up:<vec>) (wheel_radius:<number>) (max_steer:<degrees>) (suspension_freq:<number>) (brake_torque:<number>) (handbrake_torque:<number>) (torque:<number>) (min_rpm:<number>) (max_rpm:<number>) (gears:<list>) (differential:<number>) (automatic:<boolean>) (max_pitch_roll:<degrees>) (steer:<-1 to 1>) (throttle:<-1 to 1>) (brake:<0 to 1>) (handbrake:<0 to 1>)
+// @Syntax physvehicle [create/remove/input/bind/unbind] (world:<world>) name:<name> (body:<chassis body>) (drive:<front/rear/all>) (forward:<vec>) (up:<vec>) (wheel_radius:<number>) (max_steer:<degrees>) (suspension_freq:<number>) (brake_torque:<number>) (handbrake_torque:<number>) (torque:<number>) (min_rpm:<number>) (max_rpm:<number>) (gears:<list>) (differential:<number>) (automatic:<boolean>) (max_pitch_roll:<degrees>) (steer:<-1 to 1>) (throttle:<-1 to 1>) (brake:<0 to 1>) (handbrake:<0 to 1>) (wheels:<list of entities>) (chassis:<entity>) (offset:<vec>) (scale:<vec>) (rotation_offset:<rotation>) (interpolation:<ticks>) (teleport_duration:<ticks>) (remove_with_body:<boolean>)
 // @Required 2
-// @Maximum 24
-// @Short Turns a dynamic body into a wheeled vehicle, removes it, or sets driver input.
+// @Maximum 32
+// @Short Turns a dynamic body into a wheeled vehicle, removes it, sets driver input, or binds wheel and chassis display entities to it.
 // @Group Physizen
 // -->
 public class PhysVehicleCommand extends AbstractCommand {
 
     public PhysVehicleCommand() {
         setName("physvehicle");
-        setSyntax("physvehicle [create/remove/input] (world:<world>) name:<name> (body:<chassis body>) (drive:<front/rear/all>) (forward:<vec>) (up:<vec>) (wheel_radius:<number>) (max_steer:<degrees>) (suspension_freq:<number>) (brake_torque:<number>) (handbrake_torque:<number>) (torque:<number>) (min_rpm:<number>) (max_rpm:<number>) (gears:<list>) (differential:<number>) (automatic:<boolean>) (max_pitch_roll:<degrees>) (steer:<-1 to 1>) (throttle:<-1 to 1>) (brake:<0 to 1>) (handbrake:<0 to 1>)");
-        setRequiredArguments(2, 24);
+        setSyntax("physvehicle [create/remove/input/bind/unbind] (world:<world>) name:<name> (body:<chassis body>) (drive:<front/rear/all>) (forward:<vec>) (up:<vec>) (wheel_radius:<number>) (max_steer:<degrees>) (suspension_freq:<number>) (brake_torque:<number>) (handbrake_torque:<number>) (torque:<number>) (min_rpm:<number>) (max_rpm:<number>) (gears:<list>) (differential:<number>) (automatic:<boolean>) (max_pitch_roll:<degrees>) (steer:<-1 to 1>) (throttle:<-1 to 1>) (brake:<0 to 1>) (handbrake:<0 to 1>) (wheels:<list of entities>) (chassis:<entity>) (offset:<vec>) (scale:<vec>) (rotation_offset:<rotation>) (interpolation:<ticks>) (teleport_duration:<ticks>) (remove_with_body:<boolean>)");
+        setRequiredArguments(2, 32);
         isProcedural = false;
     }
 
@@ -83,6 +88,36 @@ public class PhysVehicleCommand extends AbstractCommand {
                 w.removeVehicle(name);
                 return;
             }
+            if (act.equals("unbind")) {
+                VehicleDef bound = w.vehicleDef(name);
+                PhysizenServices.get().wheelDisplays.unbind(worldId, name);
+                if (bound != null) {
+                    PhysizenServices.get().displays.unbindAll(worldId, bound.body);
+                }
+                return;
+            }
+            if (act.equals("bind")) {
+                VehicleDef bound = w.vehicleDef(name);
+                if (bound == null) {
+                    throw new PhysException("Unknown vehicle '" + name + "'.");
+                }
+                if (scriptEntry.hasObject("wheels")) {
+                    List<DisplayBinder.Binding> perWheel = new ArrayList<>();
+                    for (EntityTag et : Args.entities(scriptEntry.getObjectTag("wheels"), scriptEntry.context)) {
+                        perWheel.add(BindingArgs.create(et, scriptEntry));
+                    }
+                    if (perWheel.size() > bound.wheels.size()) {
+                        throw new PhysException("Vehicle '" + name + "' has " + bound.wheels.size() + " wheels but " + perWheel.size() + " entities were given.");
+                    }
+                    PhysizenServices.get().wheelDisplays.bind(worldId, name, perWheel);
+                }
+                if (scriptEntry.hasObject("chassis")) {
+                    for (EntityTag et : Args.entities(scriptEntry.getObjectTag("chassis"), scriptEntry.context)) {
+                        PhysizenServices.get().displays.bind(worldId, bound.body, BindingArgs.create(et, scriptEntry));
+                    }
+                }
+                return;
+            }
             if (act.equals("input")) {
                 VehicleDef current = w.vehicleDef(name);
                 if (current == null) {
@@ -96,7 +131,7 @@ public class PhysVehicleCommand extends AbstractCommand {
                 return;
             }
             if (!act.equals("create")) {
-                throw new PhysException("Unknown physvehicle action '" + act + "', expected create, remove or input.");
+                throw new PhysException("Unknown physvehicle action '" + act + "', expected create, remove, input, bind or unbind.");
             }
             if (!scriptEntry.hasObject("body")) {
                 throw new PhysException("physvehicle create needs body:<chassis body>.");

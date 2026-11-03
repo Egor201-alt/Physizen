@@ -180,6 +180,35 @@ final class ConstraintService {
         }
     }
 
+    void checkBreaks() {
+        for (Entry entry : entries.values()) {
+            ConstraintDef d = entry.def;
+            if (d.breakDistance <= 0 || entry.constraint == null || d.kind == ConstraintDef.Kind.DISTANCE || d.localA == null || d.localB == null) {
+                continue;
+            }
+            PhysBody a = d.bodyA == null ? null : world.body(d.bodyA);
+            PhysBody b = d.bodyB == null ? null : world.body(d.bodyB);
+            if (unusable(a) || unusable(b)) {
+                continue;
+            }
+            double[] pa = ConstraintDef.toWorld(a == null ? null : a.snapshot, d.localA);
+            double[] pb = ConstraintDef.toWorld(b == null ? null : b.snapshot, d.localB);
+            double dx = pa[0] - pb[0];
+            double dy = pa[1] - pb[1];
+            double dz = pa[2] - pb[2];
+            if (Math.sqrt(dx * dx + dy * dy + dz * dz) <= d.breakDistance) {
+                continue;
+            }
+            drop(d.name);
+            PhysBody self = a != null ? a : b;
+            PhysBody other = a != null ? b : null;
+            if (self != null) {
+                world.offerEvent(new PhysEvent(PhysEvent.Kind.CONSTRAINT_BREAK, world, self, other, new double[]{(pa[0] + pb[0]) * 0.5, (pa[1] + pb[1]) * 0.5, (pa[2] + pb[2]) * 0.5}, null, 0).withOwner(d.name));
+            }
+            wakeBodies(d);
+        }
+    }
+
     void drop(String name) {
         Entry entry = entries.remove(name);
         if (entry != null && entry.constraint != null) {

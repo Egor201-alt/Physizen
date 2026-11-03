@@ -20,5 +20,7 @@ public final class EngineConfig {
     public int maxInternalCompoundChildren = 8192;
     public double fallOutY = -128.0;
     public double contactMinSpeed = 0.5;
+    public double ragdollHitMinSpeed = 2.0;
+    public double vehicleHitMinSpeed = 3.0;
     public String nativeVariant = "auto";
 }

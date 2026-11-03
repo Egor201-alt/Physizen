@@ -45,6 +45,7 @@ public final class ConstraintDef {
     public double motorMaxForce = 0;
     public double motorSpringFrequency = 2.0;
     public double motorSpringDamping = 1.0;
+    public double breakDistance = 0;
 
     public double[] localA;
     public double[] localB;

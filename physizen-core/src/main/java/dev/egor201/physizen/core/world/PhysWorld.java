@@ -609,6 +609,10 @@ public final class PhysWorld {
         return events.poll();
     }
 
+    void checkConstraintBreaks() {
+        constraintService.checkBreaks();
+    }
+
     void offerEvent(PhysEvent event) {
         events.offer(event);
     }

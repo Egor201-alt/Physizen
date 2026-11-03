@@ -9,7 +9,10 @@ import dev.egor201.physizen.core.model.Snapshot;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
 import org.bukkit.World;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import org.bukkit.util.Vector;
+import dev.egor201.physizen.core.model.MotionKind;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
@@ -24,6 +27,7 @@ public class HitboxManager implements Listener {
 
     private static final double TELEPORT_DISTANCE_SQUARED = 36.0;
     private static final double STEP_SECONDS = 0.05;
+    private static final double MAX_PUSH_PER_TICK = 0.6;
 
     public static final class Hitbox {
 
@@ -32,6 +36,7 @@ public class HitboxManager implements Listener {
         public final String bodyName;
         public final double[] offset;
         public final boolean followRotation;
+        public volatile double pushStrength;
 
         Hitbox(UUID playerId, String worldId, String bodyName, double[] offset, boolean followRotation) {
             this.playerId = playerId;
@@ -52,8 +57,13 @@ public class HitboxManager implements Listener {
     }
 
     public Hitbox register(UUID playerId, String worldId, String bodyName, double[] offset, boolean followRotation) {
+        return register(playerId, worldId, bodyName, offset, followRotation, 0);
+    }
+
+    public Hitbox register(UUID playerId, String worldId, String bodyName, double[] offset, boolean followRotation, double pushStrength) {
         removeEntry(playerId, worldId, bodyName);
         Hitbox hitbox = new Hitbox(playerId, worldId, bodyName, offset, followRotation);
+        hitbox.pushStrength = pushStrength;
         hitboxes.add(hitbox);
         return hitbox;
     }
@@ -95,7 +105,7 @@ public class HitboxManager implements Listener {
         return names;
     }
 
-    public String defaultWorldFor(Player player) {
+    public String defaultWorldFor(Entity player) {
         return links.physWorldFor(player.getWorld());
     }
 
@@ -114,8 +124,8 @@ public class HitboxManager implements Listener {
                 hitboxes.remove(hitbox);
                 continue;
             }
-            Player player = Bukkit.getPlayer(hitbox.playerId);
-            if (player == null || !player.isOnline()) {
+            Entity player = Bukkit.getEntity(hitbox.playerId);
+            if (player == null || !player.isValid() || (player instanceof Player && !((Player) player).isOnline())) {
                 destroy(hitbox);
                 continue;
             }
@@ -125,10 +135,45 @@ public class HitboxManager implements Listener {
                 continue;
             }
             update(hitbox, body, player);
+            if (hitbox.pushStrength > 0) {
+                push(hitbox, body, player);
+            }
         }
     }
 
-    private void update(Hitbox hitbox, PhysBody body, Player player) {
+    private void push(Hitbox hitbox, PhysBody body, Entity entity) {
+        Vector current = entity.getVelocity();
+        double sx = 0;
+        double sy = 0;
+        double sz = 0;
+        for (PhysBody other : body.touching()) {
+            if (other.isRemoved() || other.type() != MotionKind.DYNAMIC || other.isSensor()) {
+                continue;
+            }
+            Snapshot os = other.snapshot;
+            double rx = (os.vx / 20.0) - current.getX();
+            double ry = (os.vy / 20.0) - current.getY();
+            double rz = (os.vz / 20.0) - current.getZ();
+            double mass = other.mass();
+            double share = mass / (mass + 70.0);
+            sx += rx * share;
+            sy += ry * share;
+            sz += rz * share;
+        }
+        if (sx == 0 && sy == 0 && sz == 0) {
+            return;
+        }
+        Vector push = new Vector(sx, sy, sz).multiply(hitbox.pushStrength);
+        double length = push.length();
+        if (length > MAX_PUSH_PER_TICK) {
+            push.multiply(MAX_PUSH_PER_TICK / length);
+        }
+        if (length > 0.01) {
+            entity.setVelocity(current.add(push));
+        }
+    }
+
+    private void update(Hitbox hitbox, PhysBody body, Entity player) {
         Location loc = player.getLocation();
         double yaw = Math.toRadians(-loc.getYaw());
         double ox = hitbox.offset[0];

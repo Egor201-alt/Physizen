@@ -44,6 +44,7 @@ public final class ConstraintCodec {
         cMap.putObject("motor_force", new ElementTag(def.motorMaxForce));
         cMap.putObject("motor_spring_freq", new ElementTag(def.motorSpringFrequency));
         cMap.putObject("motor_spring_damp", new ElementTag(def.motorSpringDamping));
+        cMap.putObject("break_distance", new ElementTag(def.breakDistance));
         if (def.localA != null) {
             cMap.putObject("local_a", new ElementTag(join3(def.localA)));
             cMap.putObject("local_b", new ElementTag(join3(def.localB)));
@@ -101,6 +102,7 @@ public final class ConstraintCodec {
         def.motorMaxForce = Args.num(cMap.getObject("motor_force"), 0);
         def.motorSpringFrequency = Args.num(cMap.getObject("motor_spring_freq"), 2.0);
         def.motorSpringDamping = Args.num(cMap.getObject("motor_spring_damp"), 1.0);
+        def.breakDistance = Args.num(cMap.getObject("break_distance"), 0);
     }
 
     public static ConstraintDef fromMap(PhysWorld pw, MapTag cMap) {

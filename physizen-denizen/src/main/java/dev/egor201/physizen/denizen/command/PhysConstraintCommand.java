@@ -16,7 +16,7 @@ import dev.egor201.physizen.core.world.PhysWorld;
 
 // <--[command]
 // @Name physconstraint
-// @Syntax physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) (swing:<normal,plane degrees>) (twist:<min,max degrees>) ...
+// @Syntax physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) (swing:<normal,plane degrees>) (twist:<min,max degrees>) (break_distance:<blocks>) ...
 // @Required 2
 // @Maximum 24
 // @Short Creates, removes, or controls physical constraints and joint motors.
@@ -142,6 +142,7 @@ public class PhysConstraintCommand extends AbstractCommand {
                 if (scriptEntry.hasObject("point_a")) def.pointA = Args.vec(scriptEntry.getObjectTag("point_a"), scriptEntry.context);
                 if (scriptEntry.hasObject("point_b")) def.pointB = Args.vec(scriptEntry.getObjectTag("point_b"), scriptEntry.context);
                 if (scriptEntry.hasObject("axis")) def.axis = Args.vec(scriptEntry.getObjectTag("axis"), scriptEntry.context);
+                if (scriptEntry.hasObject("break_distance")) def.breakDistance = Math.max(0, Args.num(scriptEntry.getObjectTag("break_distance"), 0));
                 if (scriptEntry.hasObject("normal")) def.normalAxis = Args.vec(scriptEntry.getObjectTag("normal"), scriptEntry.context);
 
                 boolean degrees = Args.bool(scriptEntry.getObjectTag("degrees"), false);

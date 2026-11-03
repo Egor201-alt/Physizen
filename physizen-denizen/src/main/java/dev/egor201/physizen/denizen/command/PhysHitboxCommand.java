@@ -21,22 +21,26 @@ import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.world.PhysWorld;
 import dev.egor201.physizen.core.model.ShapeSpec;
 import org.bukkit.Location;
+import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
+import com.denizenscript.denizen.objects.EntityTag;
 
 import java.util.UUID;
 
 // <--[command]
 // @Name physhitbox
-// @Syntax physhitbox [attach/detach] (player:<player>) (world:<physworld>) (name:<name>) (shape:<shape>) (offset:<vector>) (follow_rotation:<true/false>) (group:<0-15>) (sensor:<true/false>) (notify:<true/false>) (friction:<number>) (restitution:<number>) (tag:<text>)
+// @Syntax physhitbox [attach/detach] (player:<player>) (entity:<entity>) (push:<number>) (world:<physworld>) (name:<name>) (shape:<shape>) (offset:<vector>) (follow_rotation:<true/false>) (group:<0-15>) (sensor:<true/false>) (notify:<true/false>) (friction:<number>) (restitution:<number>) (tag:<text>)
 // @Required 1
-// @Maximum 16
-// @Short Attaches a Jolt hitbox to a player or removes it.
+// @Maximum 18
+// @Short Attaches a Jolt hitbox to a player, mob or item entity, or removes it.
 // @Group Physizen
 // @Description
 // Attach creates a kinematic Jolt body that follows the player every tick and pushes dynamic bodies it touches.
 // The player defaults to the linked player. The physics world defaults to the one attached to the player's world.
 // The shape defaults to capsule:0.3,1.8. The body name defaults to hitbox_<player name>.
 // The offset is measured from the player's feet and defaults to the middle of the shape's height.
+// Pass entity:<entity> to follow any mob, item or other entity instead of a player. The default name is then hitbox_<uuid>.
+// Pass push:<number> to let dynamic bodies that touch the hitbox push the entity (0 disables, 1 is a normal push).
 // Detach removes the named hitbox, or all hitboxes of the player if no name is given.
 // Hitboxes are removed automatically when the player leaves, changes world, or the physics world is removed.
 // @Usage
@@ -53,8 +57,8 @@ public class PhysHitboxCommand extends AbstractCommand {
 
     public PhysHitboxCommand() {
         setName("physhitbox");
-        setSyntax("physhitbox [attach/detach] (player:<player>) (world:<physworld>) (name:<name>) (shape:<shape>) (offset:<vector>) (follow_rotation:<true/false>) (group:<0-15>) (sensor:<true/false>) (notify:<true/false>) (friction:<number>) (restitution:<number>) (tag:<text>)");
-        setRequiredArguments(1, 16);
+        setSyntax("physhitbox [attach/detach] (player:<player>) (entity:<entity>) (push:<number>) (world:<physworld>) (name:<name>) (shape:<shape>) (offset:<vector>) (follow_rotation:<true/false>) (group:<0-15>) (sensor:<true/false>) (notify:<true/false>) (friction:<number>) (restitution:<number>) (tag:<text>)");
+        setRequiredArguments(1, 18);
         isProcedural = false;
     }
 
@@ -86,9 +90,9 @@ public class PhysHitboxCommand extends AbstractCommand {
         String act = action.asString().toLowerCase();
 
         try {
-            PlayerTag playerTag = resolvePlayer(scriptEntry);
-            if (playerTag == null) {
-                Debug.echoError(scriptEntry, "physhitbox needs player:<player> or a linked player.");
+            Entity subject = resolveSubject(scriptEntry);
+            if (subject == null) {
+                Debug.echoError(scriptEntry, "physhitbox needs player:<player>, entity:<entity> or a linked player.");
                 return;
             }
             HitboxManager manager = PhysizenServices.get().hitboxes;
@@ -97,9 +101,9 @@ public class PhysHitboxCommand extends AbstractCommand {
 
             switch (act) {
                 case "attach": {
-                    Player player = playerTag.getPlayerEntity();
-                    if (player == null || !player.isOnline()) {
-                        throw new PhysException("Player is not online.");
+                    Entity player = subject;
+                    if (!player.isValid() || (player instanceof Player && !((Player) player).isOnline())) {
+                        throw new PhysException("The entity is not available.");
                     }
                     if (worldId == null) {
                         worldId = manager.defaultWorldFor(player);
@@ -109,7 +113,7 @@ public class PhysHitboxCommand extends AbstractCommand {
                     }
                     PhysWorld world = Args.world(worldId);
                     if (name == null) {
-                        name = "hitbox_" + player.getName();
+                        name = "hitbox_" + (player instanceof Player ? player.getName() : player.getUniqueId().toString().substring(0, 8));
                     }
 
                     ShapeSpec shape = scriptEntry.hasObject("shape")
@@ -144,11 +148,11 @@ public class PhysHitboxCommand extends AbstractCommand {
 
                     manager.detach(player.getUniqueId(), worldId, name);
                     world.createBody(def);
-                    manager.register(player.getUniqueId(), worldId, name, offset, follow);
+                    manager.register(player.getUniqueId(), worldId, name, offset, follow, Args.num(scriptEntry.getObjectTag("push"), 0));
                     break;
                 }
                 case "detach": {
-                    UUID uuid = playerTag.getUUID();
+                    UUID uuid = subject.getUniqueId();
                     manager.detach(uuid, worldId, name);
                     break;
                 }
@@ -159,6 +163,16 @@ public class PhysHitboxCommand extends AbstractCommand {
         catch (PhysException e) {
             Debug.echoError(scriptEntry, e.getMessage());
         }
+    }
+
+    private static Entity resolveSubject(ScriptEntry scriptEntry) {
+        if (scriptEntry.hasObject("entity")) {
+            ObjectTag tag = scriptEntry.getObjectTag("entity");
+            EntityTag et = tag instanceof EntityTag ? (EntityTag) tag : EntityTag.valueOf(tag.toString(), scriptEntry.context);
+            return et == null ? null : et.getBukkitEntity();
+        }
+        PlayerTag playerTag = resolvePlayer(scriptEntry);
+        return playerTag == null ? null : playerTag.getPlayerEntity();
     }
 
     private static PlayerTag resolvePlayer(ScriptEntry scriptEntry) {
