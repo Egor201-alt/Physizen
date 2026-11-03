@@ -26,6 +26,7 @@ fall_out_y: -128.0
 
 # Minimum impact velocity (m/s) to trigger a contact event in scripts
 contact_min_speed: 0.5
+exact_contacts_per_step: 8
 # Minimum relative speed for the "physragdoll hit" event
 ragdoll_hit_min_speed: 2.0
 # Minimum relative speed for the "physvehicle crash" event

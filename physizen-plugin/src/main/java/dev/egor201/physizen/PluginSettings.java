@@ -24,6 +24,7 @@ final class PluginSettings {
         cfg.sensorStayIntervalSteps = Math.max(0, config.getInt("sensor_stay_interval_steps", 0));
         cfg.fallOutY = config.getDouble("fall_out_y", -128.0);
         cfg.contactMinSpeed = config.getDouble("contact_min_speed", 0.5);
+        cfg.exactContactsPerStep = config.getInt("exact_contacts_per_step", 8);
         cfg.ragdollHitMinSpeed = config.getDouble("ragdoll_hit_min_speed", 2.0);
         cfg.vehicleHitMinSpeed = config.getDouble("vehicle_hit_min_speed", 3.0);
         cfg.nativeVariant = config.getString("native_variant", "auto");

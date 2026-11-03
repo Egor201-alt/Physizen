@@ -83,7 +83,7 @@ final class ContactTracker extends CustomContactListener {
             if (pair.count.incrementAndGet() != 1 || speed < config.contactMinSpeed) {
                 return;
             }
-            double[] exact = ContactPoints.between(b1, b2);
+            double[] exact = exactPoint(b1, b2, p1, p2);
             emitContact(PhysEvent.Kind.COLLIDE, p1, p2, n12, depth, speed, exact);
             emitContact(PhysEvent.Kind.COLLIDE, p2, p1, n12 == null ? null : ContactGeometry.negate(n12), depth, speed, exact);
         }
@@ -122,7 +122,7 @@ final class ContactTracker extends CustomContactListener {
             Vec3 v1 = b1.getLinearVelocity();
             Vec3 v2 = b2.getLinearVelocity();
             double speed = Math.sqrt(Math.pow(v1.getX() - v2.getX(), 2) + Math.pow(v1.getY() - v2.getY(), 2) + Math.pow(v1.getZ() - v2.getZ(), 2));
-            double[] exact = ContactPoints.between(b1, b2);
+            double[] exact = exactPoint(b1, b2, p1, p2);
             if (p1.def.notifyPersist) {
                 emitContact(PhysEvent.Kind.CONTACT_PERSISTED, p1, p2, n12, depth, speed, exact);
             }
@@ -151,6 +151,26 @@ final class ContactTracker extends CustomContactListener {
         }
     }
 
+    private final java.util.concurrent.atomic.AtomicLong budgetStep = new java.util.concurrent.atomic.AtomicLong(-1);
+    private final AtomicInteger budgetUsed = new AtomicInteger();
+
+    private double[] exactPoint(Body b1, Body b2, PhysBody p1, PhysBody p2) {
+        int limit = config.exactContactsPerStep;
+        if (limit <= 0) {
+            return midpoint(p1, p2);
+        }
+        long step = world.stepCount();
+        if (budgetStep.get() != step) {
+            budgetStep.set(step);
+            budgetUsed.set(0);
+        }
+        if (budgetUsed.incrementAndGet() > limit) {
+            return midpoint(p1, p2);
+        }
+        double[] exact = ContactPoints.between(b1, b2);
+        return exact != null ? exact : midpoint(p1, p2);
+    }
+
     private void derived(Body b1, Body b2, PhysBody p1, PhysBody p2, double[] n12, double depth, double speed) {
         if (p1.def.internal && p2.def.internal) {
             return;
@@ -176,7 +196,7 @@ final class ContactTracker extends CustomContactListener {
             lastDerived.clear();
         }
         lastDerived.put(key(b1.getId(), b2.getId()), step);
-        double[] point = ContactPoints.between(b1, b2);
+        double[] point = exactPoint(b1, b2, p1, p2);
         double[] n21 = n12 == null ? null : ContactGeometry.negate(n12);
         if (ragdollHit) {
             if (r1) {

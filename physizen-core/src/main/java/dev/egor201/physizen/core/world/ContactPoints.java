@@ -1,6 +1,6 @@
 package dev.egor201.physizen.core.world;
 
-import com.github.stephengold.joltjni.AllHitCollideShapeCollector;
+import com.github.stephengold.joltjni.ClosestHitCollideShapeCollector;
 import com.github.stephengold.joltjni.Body;
 import com.github.stephengold.joltjni.CollideShapeResult;
 import com.github.stephengold.joltjni.CollideShapeSettings;
@@ -31,15 +31,10 @@ final class ContactPoints {
             Mat44 t2 = Mat44.sRotationTranslation(q2, new Vec3((float) (c2.xx() - bx), (float) (c2.yy() - by), (float) (c2.zz() - bz)));
             CollideShapeSettings settings = new CollideShapeSettings();
             settings.setMaxSeparationDistance(SEPARATION);
-            AllHitCollideShapeCollector collector = new AllHitCollideShapeCollector();
+            ClosestHitCollideShapeCollector collector = new ClosestHitCollideShapeCollector();
             CollisionDispatch.sCollideShapeVsShape(b1.getShape(), b2.getShape(), new Vec3(1f, 1f, 1f), new Vec3(1f, 1f, 1f), t1, t2,
                     new SubShapeIdCreator(), new SubShapeIdCreator(), settings, collector);
-            CollideShapeResult best = null;
-            for (CollideShapeResult r : collector.getHits()) {
-                if (best == null || r.getPenetrationDepth() > best.getPenetrationDepth()) {
-                    best = r;
-                }
-            }
+            CollideShapeResult best = collector.hadHit() ? collector.getHit() : null;
             if (best == null) {
                 return null;
             }
