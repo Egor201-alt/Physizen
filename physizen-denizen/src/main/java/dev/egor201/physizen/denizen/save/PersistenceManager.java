@@ -136,6 +136,11 @@ public class PersistenceManager implements Listener, BindingHooks {
                 }
             }
             root.putObject("constraints", constraints);
+            ListTag vehicles = new ListTag();
+            for (MapTag v : VehicleCodec.listFor(world, bodyName)) {
+                vehicles.addObject(v);
+            }
+            root.putObject("vehicles", vehicles);
             entity.getPersistentDataContainer().set(key, PersistentDataType.BYTE_ARRAY, PrefabFiles.toBlob(root));
         }
         catch (Exception e) {
@@ -371,6 +376,20 @@ public class PersistenceManager implements Listener, BindingHooks {
             }
         }
         resolveConstraints(worldId);
+        if (root.containsKey("vehicles")) {
+            for (ObjectTag obj : root.getObject("vehicles").asType(ListTag.class, CoreUtilities.noDebugContext).objectForms) {
+                MapTag v = obj.asType(MapTag.class, CoreUtilities.noDebugContext);
+                if (v == null || world.vehicleDef(nameOf(v, "name")) != null) {
+                    continue;
+                }
+                try {
+                    world.addVehicle(VehicleCodec.fromMap(v, ""));
+                }
+                catch (PhysException e) {
+                    plugin.getLogger().warning("Could not restore vehicle " + nameOf(v, "name") + ": " + e.getMessage());
+                }
+            }
+        }
         return true;
     }
 }

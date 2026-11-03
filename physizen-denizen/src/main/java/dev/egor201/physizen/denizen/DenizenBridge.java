@@ -6,6 +6,8 @@ import com.denizenscript.denizencore.tags.TagManager;
 import dev.egor201.physizen.denizen.command.PhysBodyCommand;
 import dev.egor201.physizen.denizen.command.PhysCharacterCommand;
 import dev.egor201.physizen.denizen.command.PhysConstraintCommand;
+import dev.egor201.physizen.denizen.command.PhysRagdollCommand;
+import dev.egor201.physizen.denizen.command.PhysVehicleCommand;
 import dev.egor201.physizen.denizen.command.PhysFieldCommand;
 import dev.egor201.physizen.denizen.command.PhysForceCommand;
 import dev.egor201.physizen.denizen.command.PhysHitboxCommand;
@@ -65,6 +67,8 @@ public final class DenizenBridge {
         DenizenCore.commandRegistry.registerCommand(PhysFieldCommand.class);
         DenizenCore.commandRegistry.registerCommand(PhysHitboxCommand.class);
         DenizenCore.commandRegistry.registerCommand(PhysCharacterCommand.class);
+        DenizenCore.commandRegistry.registerCommand(PhysRagdollCommand.class);
+        DenizenCore.commandRegistry.registerCommand(PhysVehicleCommand.class);
 
         PhysScriptEvents.registerAll();
     }

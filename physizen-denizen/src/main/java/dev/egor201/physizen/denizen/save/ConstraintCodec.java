@@ -36,6 +36,8 @@ public final class ConstraintCodec {
         cMap.putObject("spring_freq", new ElementTag(def.springFrequency));
         cMap.putObject("spring_damp", new ElementTag(def.springDamping));
         cMap.putObject("cone_angle", new ElementTag(Math.toDegrees(def.halfConeAngle)));
+        cMap.putObject("swing", new ElementTag(Math.toDegrees(def.swingNormalHalfCone) + "," + Math.toDegrees(def.swingPlaneHalfCone)));
+        cMap.putObject("twist", new ElementTag(Math.toDegrees(def.twistMin) + "," + Math.toDegrees(def.twistMax)));
         cMap.putObject("motor_state", new ElementTag(def.motorState.name().toLowerCase()));
         cMap.putObject("motor_target", new ElementTag(def.motorTarget));
         cMap.putObject("motor_torque", new ElementTag(def.motorMaxTorque));
@@ -75,6 +77,17 @@ public final class ConstraintCodec {
         def.springDamping = Args.num(cMap.getObject("spring_damp"), 0.5);
         if (cMap.containsKey("cone_angle")) {
             def.halfConeAngle = Math.toRadians(Args.num(cMap.getObject("cone_angle"), 45.0));
+        }
+
+        if (cMap.containsKey("swing")) {
+            double[] sw = Args.pair(cMap.getObject("swing"));
+            def.swingNormalHalfCone = Math.toRadians(sw[0]);
+            def.swingPlaneHalfCone = Math.toRadians(sw[1]);
+        }
+        if (cMap.containsKey("twist")) {
+            double[] tw = Args.pair(cMap.getObject("twist"));
+            def.twistMin = Math.toRadians(tw[0]);
+            def.twistMax = Math.toRadians(tw[1]);
         }
 
         if (cMap.containsKey("motor_state")) {

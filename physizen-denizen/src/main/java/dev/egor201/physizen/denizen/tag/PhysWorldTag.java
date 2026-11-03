@@ -20,6 +20,7 @@ import dev.egor201.physizen.core.world.PhysEngine;
 import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.world.PhysWorld;
 import dev.egor201.physizen.core.model.QueryFilter;
+import dev.egor201.physizen.core.model.VehicleTelemetry;
 import dev.egor201.physizen.core.world.QueryHit;
 import dev.egor201.physizen.core.world.RayHit;
 import dev.egor201.physizen.core.model.ShapeSpec;
@@ -426,6 +427,81 @@ public class PhysWorldTag implements ObjectTag {
                 list.addObject(new PhysBodyTag(object.id, body.name));
             }
             return list;
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.ragdolls>
+        // @returns ListTag
+        // @description
+        // Returns the ids of all ragdolls in this world.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "ragdolls", (attribute, object) -> new ListTag(need(object).ragdollIds()));
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.ragdoll_parts[<ragdoll_id>]>
+        // @returns ListTag(PhysBodyTag)
+        // @description
+        // Returns the bodies that make up the given ragdoll.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, ElementTag.class, "ragdoll_parts", (attribute, object, param) -> {
+            ListTag list = new ListTag();
+            for (String name : need(object).ragdollParts(param.asString())) {
+                list.addObject(new PhysBodyTag(object.id, name));
+            }
+            return list;
+        });
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.vehicles>
+        // @returns ListTag
+        // @description
+        // Returns the names of all vehicles in this world.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(ListTag.class, "vehicles", (attribute, object) -> new ListTag(need(object).vehicleNames()));
+
+        // <--[tag]
+        // @attribute <PhysWorldTag.vehicle_info[<vehicle_name>]>
+        // @returns MapTag
+        // @description
+        // Returns live telemetry of the given vehicle: speed, rpm, gear, wheel_count and per-wheel lists wheel_positions (vectors), wheel_rotations (quaternions), steer_angles, spin_angles (radians), suspension_lengths and contacts.
+        // @group Physizen
+        // -->
+        tagProcessor.registerTag(MapTag.class, ElementTag.class, "vehicle_info", (attribute, object, param) -> {
+            PhysWorld world = need(object);
+            VehicleTelemetry t = world.vehicleTelemetry(param.asString());
+            if (t == null) {
+                return null;
+            }
+            MapTag map = new MapTag();
+            map.putObject("speed", new ElementTag(t.speed));
+            map.putObject("rpm", new ElementTag(t.rpm));
+            map.putObject("gear", new ElementTag(t.gear));
+            map.putObject("wheel_count", new ElementTag(t.wheelCount));
+            ListTag positions = new ListTag();
+            ListTag rotations = new ListTag();
+            ListTag steer = new ListTag();
+            ListTag spin = new ListTag();
+            ListTag suspension = new ListTag();
+            ListTag contacts = new ListTag();
+            for (int i = 0; i < t.wheelCount; i++) {
+                positions.addObject(Args.tagVec(t.wheelPos[i]));
+                double[] q = t.wheelRot[i];
+                rotations.addObject(Args.tagQuat(q[0], q[1], q[2], q[3]));
+                steer.addObject(new ElementTag(t.steerAngle[i]));
+                spin.addObject(new ElementTag(t.spinAngle[i]));
+                suspension.addObject(new ElementTag(t.suspensionLength[i]));
+                contacts.addObject(new ElementTag(t.contact[i]));
+            }
+            map.putObject("wheel_positions", positions);
+            map.putObject("wheel_rotations", rotations);
+            map.putObject("steer_angles", steer);
+            map.putObject("spin_angles", spin);
+            map.putObject("suspension_lengths", suspension);
+            map.putObject("contacts", contacts);
+            return map;
         });
 
         // <--[tag]

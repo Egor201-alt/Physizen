@@ -1,6 +1,9 @@
 package dev.egor201.physizen.core.world;
 
 import com.github.stephengold.joltjni.BodyInterface;
+import com.github.stephengold.joltjni.CollisionGroup;
+import com.github.stephengold.joltjni.GroupFilterTable;
+import com.github.stephengold.joltjni.GroupFilterTableRef;
 import com.github.stephengold.joltjni.CustomBodyActivationListener;
 import com.github.stephengold.joltjni.PhysicsSystem;
 import com.github.stephengold.joltjni.Vec3;
@@ -41,6 +44,9 @@ public final class PhysWorld {
     private final ConcurrentHashMap<String, PhysCharacter> characters = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, FieldDef> fields = new ConcurrentHashMap<>();
     private final ConstraintService constraintService;
+    private final ConcurrentHashMap<String, RagdollFilter> ragdollFilters = new ConcurrentHashMap<>();
+    private int nextRagdollGroupId = 1;
+    final VehicleService vehicleService;
     private final WorldSpatial spatial;
     private final StepLoop loop;
     private final WorldQueries queries;
@@ -77,6 +83,7 @@ public final class PhysWorld {
         };
         system.setBodyActivationListener(activationListener);
         constraintService = new ConstraintService(this);
+        vehicleService = new VehicleService(this);
         spatial = new WorldSpatial(this);
         loop = new StepLoop(this);
         queries = new WorldQueries(this);
@@ -267,7 +274,7 @@ public final class PhysWorld {
             return;
         }
         try {
-            BodyFactory.instantiate(bodyInterface, pb);
+            BodyFactory.instantiate(bodyInterface, pb, ragdollGroup(pb.def));
             byJoltId.put(pb.joltId, pb);
             BodyFactory.activate(bodyInterface, pb);
             pb.ready = true;
@@ -293,6 +300,7 @@ public final class PhysWorld {
             return;
         }
         pb.removed = true;
+        vehicleService.removeForBody(name);
         constraintService.removeFor(name);
         post(() -> destroyBody(pb));
     }
@@ -435,6 +443,119 @@ public final class PhysWorld {
         return new ArrayList<>(fields.values());
     }
 
+    static final class RagdollFilter {
+
+        final GroupFilterTable table;
+        final GroupFilterTableRef ref;
+        final int groupId;
+
+        RagdollFilter(int groupId) {
+            this.table = new GroupFilterTable(RagdollSpec.MAX_BONES);
+            this.ref = table.toRef();
+            this.groupId = groupId;
+        }
+    }
+
+    CollisionGroup ragdollGroup(BodyDef def) {
+        if (def.ragdoll == null || def.ragdoll.isEmpty() || def.ragdollIndex < 0 || def.ragdollIndex >= RagdollSpec.MAX_BONES) {
+            return null;
+        }
+        RagdollFilter f = ragdollFilters.computeIfAbsent(def.ragdoll, k -> new RagdollFilter(nextRagdollGroupId++));
+        return new CollisionGroup(f.ref, f.groupId, def.ragdollIndex);
+    }
+
+    void disableRagdollCollision(PhysBody a, PhysBody b) {
+        if (a == null || b == null || a.def.ragdoll == null || a.def.ragdoll.isEmpty() || !a.def.ragdoll.equals(b.def.ragdoll)) {
+            return;
+        }
+        RagdollFilter f = ragdollFilters.get(a.def.ragdoll);
+        if (f == null || a.def.ragdollIndex < 0 || b.def.ragdollIndex < 0) {
+            return;
+        }
+        f.table.disableCollision(a.def.ragdollIndex, b.def.ragdollIndex);
+    }
+
+    public List<String> spawnRagdoll(RagdollSpec spec, RagdollBuilder.Options options) {
+        checkAlive();
+        RagdollBuilder.Result built = RagdollBuilder.build(spec, options);
+        for (BodyDef d : built.bodies) {
+            if (bodies.containsKey(d.name)) {
+                throw new PhysException("Ragdoll part " + d.name + " already exists.");
+            }
+        }
+        List<String> names = new ArrayList<>();
+        try {
+            for (BodyDef d : built.bodies) {
+                createBody(d);
+                names.add(d.name);
+            }
+            for (ConstraintDef c : built.constraints) {
+                addConstraint(c);
+            }
+        }
+        catch (RuntimeException e) {
+            for (String n : names) {
+                removeBody(n);
+            }
+            throw e;
+        }
+        return names;
+    }
+
+    public List<String> ragdollParts(String id) {
+        List<String> names = new ArrayList<>();
+        for (PhysBody pb : bodies.values()) {
+            if (id.equals(pb.def.ragdoll)) {
+                names.add(pb.name);
+            }
+        }
+        java.util.Collections.sort(names);
+        return names;
+    }
+
+    public List<String> ragdollIds() {
+        java.util.Set<String> ids = new java.util.TreeSet<>();
+        for (PhysBody pb : bodies.values()) {
+            if (pb.def.ragdoll != null && !pb.def.ragdoll.isEmpty()) {
+                ids.add(pb.def.ragdoll);
+            }
+        }
+        return new ArrayList<>(ids);
+    }
+
+    public int removeRagdoll(String id) {
+        List<String> parts = ragdollParts(id);
+        for (String n : parts) {
+            removeBody(n);
+        }
+        return parts.size();
+    }
+
+    public void addVehicle(dev.egor201.physizen.core.model.VehicleDef def) {
+        checkAlive();
+        vehicleService.add(def);
+    }
+
+    public boolean removeVehicle(String name) {
+        return vehicleService.remove(name);
+    }
+
+    public dev.egor201.physizen.core.model.VehicleDef vehicleDef(String name) {
+        return vehicleService.def(name);
+    }
+
+    public List<String> vehicleNames() {
+        return vehicleService.names();
+    }
+
+    public void setVehicleInput(String name, double forward, double steer, double brake, double handbrake) {
+        vehicleService.setInput(name, forward, steer, brake, handbrake);
+    }
+
+    public dev.egor201.physizen.core.model.VehicleTelemetry vehicleTelemetry(String name) {
+        return vehicleService.telemetry(name);
+    }
+
     public void addConstraint(ConstraintDef def) {
         checkAlive();
         constraintService.add(def);
@@ -522,6 +643,7 @@ public final class PhysWorld {
                     c.destroy();
                 }
                 characters.clear();
+                vehicleService.dropAll();
                 constraintService.dropAll();
                 for (PhysBody pb : new ArrayList<>(bodies.values())) {
                     pb.removed = true;

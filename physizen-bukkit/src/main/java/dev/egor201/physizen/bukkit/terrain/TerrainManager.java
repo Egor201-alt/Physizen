@@ -96,6 +96,27 @@ public class TerrainManager implements Listener {
     private final Set<TileKey> dirtyTiles = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Map<Long, ChunkSnapshot> snapshotCache = new HashMap<>();
 
+    private static final double DIRTY_BASE = 0.0;
+    private static final double BODY_BASE = 1.0e6;
+    private static final double PLAYER_BASE = 1.0e9;
+
+    private volatile boolean cfgPlayerPreload = true;
+    private volatile int cfgPlayerRadius = 3;
+    private volatile int cfgPlayerVertical = 1;
+    private volatile int cfgTilesPerTick = 8;
+    private volatile int cfgTickBudgetMs = 4;
+    private volatile int cfgSnapshotPerTick = 16;
+
+    public void configure(boolean playerPreload, int playerRadiusTiles, int playerVerticalTiles,
+                          int tilesPerTick, int tickBudgetMs, int snapshotPerTick) {
+        this.cfgPlayerPreload = playerPreload;
+        this.cfgPlayerRadius = Math.max(0, Math.min(12, playerRadiusTiles));
+        this.cfgPlayerVertical = Math.max(0, Math.min(8, playerVerticalTiles));
+        this.cfgTilesPerTick = Math.max(1, tilesPerTick);
+        this.cfgTickBudgetMs = Math.max(1, tickBudgetMs);
+        this.cfgSnapshotPerTick = Math.max(1, snapshotPerTick);
+    }
+
     public TerrainManager(WorldLinks links, Logger logger) {
         this.links = links;
         this.logger = logger;
@@ -252,7 +273,7 @@ public class TerrainManager implements Listener {
 
         try {
             boolean hasActiveBodies = false;
-            Set<TileKey> neededTiles = new HashSet<>();
+            Map<TileKey, Double> scores = new HashMap<>();
 
             for (PhysWorld world : engine.worlds()) {
                 World bukkitWorld = links.get(world.id);
@@ -260,13 +281,19 @@ public class TerrainManager implements Listener {
 
                 int worldMinTy = bukkitWorld.getMinHeight() >> TILE_SHIFT;
                 int worldMaxTy = (bukkitWorld.getMaxHeight() - 1) >> TILE_SHIFT;
+                boolean worldHasBodies = false;
 
                 for (PhysBody body : world.bodies()) {
                     if (body.def.type == MotionKind.STATIC) continue;
+                    worldHasBodies = true;
                     Snapshot s = body.snapshot;
 
                     if (!s.active) continue;
                     hasActiveBodies = true;
+
+                    double cx = (s.minX + s.maxX) * 0.5;
+                    double cy = (s.minY + s.maxY) * 0.5;
+                    double cz = (s.minZ + s.maxZ) * 0.5;
 
                     int minTx = ((int) Math.floor(s.minX)) >> TILE_SHIFT;
                     int maxTx = ((int) Math.floor(s.maxX)) >> TILE_SHIFT;
@@ -284,10 +311,40 @@ public class TerrainManager implements Listener {
                         for (int y = minTy; y <= maxTy; y++) {
                             for (int z = minTz - 1; z <= maxTz + 1; z++) {
                                 TileKey key = new TileKey(world.id, x, y, z);
-                                neededTiles.add(key);
                                 TileData existing = activeTiles.get(key);
                                 if (existing != null) {
                                     existing.lastSeenStep = currentStep;
+                                }
+                                double dx = ((x << TILE_SHIFT) + 8) - cx;
+                                double dy = ((y << TILE_SHIFT) + 8) - cy;
+                                double dz = ((z << TILE_SHIFT) + 8) - cz;
+                                double sc = BODY_BASE + dx * dx + dy * dy + dz * dz;
+                                scores.merge(key, sc, Math::min);
+                            }
+                        }
+                    }
+                }
+
+                if (cfgPlayerPreload && worldHasBodies) {
+                    int r = cfgPlayerRadius;
+                    int v = cfgPlayerVertical;
+                    for (org.bukkit.entity.Player p : bukkitWorld.getPlayers()) {
+                        Location pl = p.getLocation();
+                        int ptx = pl.getBlockX() >> TILE_SHIFT;
+                        int pty = pl.getBlockY() >> TILE_SHIFT;
+                        int ptz = pl.getBlockZ() >> TILE_SHIFT;
+                        for (int x = ptx - r; x <= ptx + r; x++) {
+                            for (int z = ptz - r; z <= ptz + r; z++) {
+                                for (int y = pty - v; y <= pty + v; y++) {
+                                    if (y < worldMinTy || y > worldMaxTy) continue;
+                                    TileKey key = new TileKey(world.id, x, y, z);
+                                    TileData existing = activeTiles.get(key);
+                                    if (existing != null) {
+                                        existing.lastSeenStep = currentStep;
+                                    }
+                                    double dx = x - ptx, dy = (y - pty) * 2.0, dz = z - ptz;
+                                    double sc = PLAYER_BASE + dx * dx + dy * dy + dz * dz;
+                                    scores.merge(key, sc, Math::min);
                                 }
                             }
                         }
@@ -295,25 +352,41 @@ public class TerrainManager implements Listener {
                 }
             }
 
-            neededTiles.addAll(dirtyTiles);
+            for (TileKey dk : dirtyTiles) {
+                scores.put(dk, DIRTY_BASE);
+            }
             dirtyTiles.clear();
+            for (TileData t : activeTiles.values()) {
+                if (t.dirty) scores.put(t.key, DIRTY_BASE);
+            }
 
-            if (neededTiles.isEmpty() && !hasActiveBodies && (currentStep % 100 != 0)) {
+            if (scores.isEmpty() && !hasActiveBodies && (currentStep % 100 != 0)) {
                 return;
             }
 
-            int snapshotBudget = 16;
-            for (TileKey key : neededTiles) {
-                Long retryAt = failedTiles.get(key);
+            List<Map.Entry<TileKey, Double>> queue = new ArrayList<>(scores.size());
+            for (Map.Entry<TileKey, Double> e : scores.entrySet()) {
+                TileData t = activeTiles.get(e.getKey());
+                if (t != null && !t.dirty) continue;
+                Long retryAt = failedTiles.get(e.getKey());
                 if (retryAt != null && currentStep < retryAt) continue;
+                queue.add(e);
+            }
+            queue.sort(Map.Entry.comparingByValue());
+
+            int snapshotBudget = cfgSnapshotPerTick;
+            int tileBudget = cfgTilesPerTick;
+            long deadline = System.nanoTime() + cfgTickBudgetMs * 1_000_000L;
+            int built = 0;
+            for (Map.Entry<TileKey, Double> entry : queue) {
+                TileKey key = entry.getKey();
+                boolean urgent = entry.getValue() < BODY_BASE;
+                if (built >= tileBudget && (!urgent || built >= tileBudget * 4)) break;
+                if (built > 0 && System.nanoTime() > deadline && (!urgent || built >= tileBudget * 4)) break;
                 try {
                     TileData tile = activeTiles.get(key);
                     World bukkitWorld = links.get(key.worldId);
                     if (bukkitWorld == null) continue;
-
-                    if (tile != null && !tile.dirty) {
-                        continue;
-                    }
 
                     int chunkX = key.tx;
                     int chunkZ = key.tz;
@@ -340,6 +413,7 @@ public class TerrainManager implements Listener {
                         tile.lastSeenStep = currentStep;
                         rebuildTile(key, tile, chunk, bukkitWorld);
                     }
+                    built++;
                     failedTiles.remove(key);
                 } catch (Throwable t) {
                     failedTiles.put(key, currentStep + TILE_RETRY_STEPS);

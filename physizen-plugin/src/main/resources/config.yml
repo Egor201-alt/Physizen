@@ -59,3 +59,17 @@ limits:
   max_compound_children: 256
   # Maximum number of parts in an internal terrain tile shape
   max_terrain_compound_children: 8192
+
+terrain:
+  # Preload terrain tiles around players (only in physics worlds that contain dynamic bodies)
+  player_preload: true
+  # Radius (in 16-block tiles) around each player that is kept loaded
+  player_radius_tiles: 3
+  # Vertical radius (in tiles) around each player
+  player_vertical_tiles: 1
+  # Tiles built per server tick (tiles under moving bodies and changed blocks may exceed this up to 4x)
+  tiles_per_tick: 8
+  # Soft time budget in milliseconds for tile building per tick
+  tick_budget_ms: 4
+  # Chunk snapshots taken per tick
+  snapshot_per_tick: 16

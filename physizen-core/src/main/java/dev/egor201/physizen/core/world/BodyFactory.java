@@ -3,6 +3,7 @@ package dev.egor201.physizen.core.world;
 import com.github.stephengold.joltjni.Body;
 import com.github.stephengold.joltjni.BodyCreationSettings;
 import com.github.stephengold.joltjni.BodyInterface;
+import com.github.stephengold.joltjni.CollisionGroup;
 import com.github.stephengold.joltjni.Quat;
 import com.github.stephengold.joltjni.RVec3;
 import com.github.stephengold.joltjni.ShapeRefC;
@@ -25,7 +26,7 @@ final class BodyFactory {
         return kind == MotionKind.STATIC ? EMotionType.Static : kind == MotionKind.KINEMATIC ? EMotionType.Kinematic : EMotionType.Dynamic;
     }
 
-    static void instantiate(BodyInterface bodyInterface, PhysBody pb) {
+    static void instantiate(BodyInterface bodyInterface, PhysBody pb, CollisionGroup group) {
         BodyDef def = pb.def;
         ShapeRefC shape = ShapeBuilder.build(def.shape);
         try {
@@ -33,6 +34,9 @@ final class BodyFactory {
             bcs.setShape(shape);
             bcs.setPosition(new RVec3(def.position[0], def.position[1], def.position[2]));
             bcs.setRotation(new Quat((float) def.rotation[0], (float) def.rotation[1], (float) def.rotation[2], (float) def.rotation[3]));
+            if (group != null) {
+                bcs.setCollisionGroup(group);
+            }
             bcs.setMotionType(motion(def.type));
             bcs.setAllowDynamicOrKinematic(!def.internal);
             bcs.setObjectLayer(WorldLayers.layerFor(def));

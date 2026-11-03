@@ -98,6 +98,7 @@ final class ConstraintService {
             TwoBodyConstraint made = ConstraintFactory.create(def, body1, body2);
             world.system.addConstraint(made);
             entry.constraint = made;
+            world.disableRagdollCollision(a, b);
         }
         catch (Throwable t) {
             entries.remove(def.name, entry);

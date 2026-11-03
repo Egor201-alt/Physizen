@@ -92,6 +92,7 @@ final class StepLoop {
                     world.log.warning("Character " + c.name + " update failed in world " + world.id + ": " + t);
                 }
             }
+            world.vehicleService.applyInputs();
             world.system.update(dt, world.engine.config().collisionSteps, world.engine.tempAllocator(), world.engine.jobSystem());
         }
         catch (Throwable t) {
@@ -112,6 +113,7 @@ final class StepLoop {
         stepFailures = 0;
         stepCount++;
         publishAll();
+        world.vehicleService.publish();
         lastStepNanos = System.nanoTime() - start;
     }
 

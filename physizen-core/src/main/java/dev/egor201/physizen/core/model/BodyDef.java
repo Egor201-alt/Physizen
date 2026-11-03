@@ -28,6 +28,8 @@ public final class BodyDef {
     public boolean internal = false;
     public boolean managed = false;
     public String tag = "";
+    public String ragdoll = "";
+    public int ragdollIndex = -1;
 
     public BodyDef copy() {
         BodyDef c = new BodyDef();
@@ -57,6 +59,8 @@ public final class BodyDef {
         c.internal = internal;
         c.managed = managed;
         c.tag = tag;
+        c.ragdoll = ragdoll;
+        c.ragdollIndex = ragdollIndex;
         return c;
     }
 }

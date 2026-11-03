@@ -8,7 +8,8 @@ public final class ConstraintDef {
         HINGE,
         SLIDER,
         DISTANCE,
-        CONE
+        CONE,
+        SWING_TWIST
     }
 
     public enum MotorState {
@@ -32,6 +33,11 @@ public final class ConstraintDef {
     public double springDamping = 0.5;
     public double maxFriction = 0;
     public double halfConeAngle = 0.7853981634;
+
+    public double swingNormalHalfCone = 0.7853981634;
+    public double swingPlaneHalfCone = 0.7853981634;
+    public double twistMin = -0.7853981634;
+    public double twistMax = 0.7853981634;
 
     public MotorState motorState = MotorState.OFF;
     public double motorTarget = 0;

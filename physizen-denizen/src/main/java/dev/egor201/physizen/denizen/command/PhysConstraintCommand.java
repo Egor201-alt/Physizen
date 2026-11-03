@@ -16,7 +16,7 @@ import dev.egor201.physizen.core.world.PhysWorld;
 
 // <--[command]
 // @Name physconstraint
-// @Syntax physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...
+// @Syntax physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) (swing:<normal,plane degrees>) (twist:<min,max degrees>) ...
 // @Required 2
 // @Maximum 24
 // @Short Creates, removes, or controls physical constraints and joint motors.
@@ -26,7 +26,7 @@ public class PhysConstraintCommand extends AbstractCommand {
 
     public PhysConstraintCommand() {
         setName("physconstraint");
-        setSyntax("physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) ...");
+        setSyntax("physconstraint [create/remove/motor/set] (world:<world>) name:<name> (type:<type>) (body_a:<a>) (body_b:<b>) (point_a:<loc>) (point_b:<loc>) (axis:<vec>) (swing:<normal,plane degrees>) (twist:<min,max degrees>) ...");
         setRequiredArguments(2, 24);
         isProcedural = false;
     }
@@ -164,6 +164,16 @@ public class PhysConstraintCommand extends AbstractCommand {
                 if (scriptEntry.hasObject("cone_angle")) {
                     double angle = Math.toRadians(Args.num(scriptEntry.getObjectTag("cone_angle"), 45.0));
                     def.halfConeAngle = Math.max(0.01, Math.min(Math.PI, angle));
+                }
+                if (scriptEntry.hasObject("swing")) {
+                    double[] sw = Args.pair(scriptEntry.getObjectTag("swing"));
+                    def.swingNormalHalfCone = Math.max(0.0, Math.min(Math.PI, Math.toRadians(sw[0])));
+                    def.swingPlaneHalfCone = Math.max(0.0, Math.min(Math.PI, Math.toRadians(sw[1])));
+                }
+                if (scriptEntry.hasObject("twist")) {
+                    double[] tw = Args.pair(scriptEntry.getObjectTag("twist"));
+                    def.twistMin = Math.max(-Math.PI, Math.min(Math.PI, Math.toRadians(Math.min(tw[0], tw[1]))));
+                    def.twistMax = Math.max(-Math.PI, Math.min(Math.PI, Math.toRadians(Math.max(tw[0], tw[1]))));
                 }
                 def.maxFriction = Args.num(scriptEntry.getObjectTag("friction"), 0);
                 def.springFrequency = Args.num(scriptEntry.getObjectTag("spring_freq"), 0);

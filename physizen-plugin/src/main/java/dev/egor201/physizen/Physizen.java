@@ -39,6 +39,13 @@ public final class Physizen extends JavaPlugin {
 
         services = PhysizenServices.create(this);
         services.registerListeners();
+        services.terrain.configure(
+                getConfig().getBoolean("terrain.player_preload", true),
+                getConfig().getInt("terrain.player_radius_tiles", 3),
+                getConfig().getInt("terrain.player_vertical_tiles", 1),
+                getConfig().getInt("terrain.tiles_per_tick", 8),
+                getConfig().getInt("terrain.tick_budget_ms", 4),
+                getConfig().getInt("terrain.snapshot_per_tick", 16));
         persistence = new PersistenceManager(this, getConfig());
         services.displays.setHooks(persistence);
         DenizenServices.init(this, persistence);

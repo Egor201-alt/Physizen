@@ -11,6 +11,7 @@ import com.github.stephengold.joltjni.RVec3;
 import com.github.stephengold.joltjni.SliderConstraint;
 import com.github.stephengold.joltjni.SliderConstraintSettings;
 import com.github.stephengold.joltjni.SpringSettings;
+import com.github.stephengold.joltjni.SwingTwistConstraintSettings;
 import com.github.stephengold.joltjni.TwoBodyConstraint;
 import com.github.stephengold.joltjni.Vec3;
 import com.github.stephengold.joltjni.enumerate.EConstraintSpace;
@@ -95,6 +96,22 @@ public final class ConstraintFactory {
                 s.setTwistAxis1(axis);
                 s.setTwistAxis2(axis);
                 s.setHalfConeAngle((float) def.halfConeAngle);
+                return s.create(body1, body2);
+            }
+            case SWING_TWIST: {
+                SwingTwistConstraintSettings s = new SwingTwistConstraintSettings();
+                s.setSpace(EConstraintSpace.WorldSpace);
+                s.setPosition1(point1);
+                s.setPosition2(point2);
+                s.setTwistAxis1(axis);
+                s.setTwistAxis2(axis);
+                s.setPlaneAxis1(normal);
+                s.setPlaneAxis2(normal);
+                s.setNormalHalfConeAngle((float) def.swingNormalHalfCone);
+                s.setPlaneHalfConeAngle((float) def.swingPlaneHalfCone);
+                s.setTwistMinAngle((float) def.twistMin);
+                s.setTwistMaxAngle((float) def.twistMax);
+                s.setMaxFrictionTorque((float) def.maxFriction);
                 return s.create(body1, body2);
             }
             default: {

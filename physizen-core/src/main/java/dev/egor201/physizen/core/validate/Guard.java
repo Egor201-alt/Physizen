@@ -206,6 +206,18 @@ public final class Guard {
         number(d.springDamping, "spring damping");
         number(d.halfConeAngle, "cone angle");
         number(d.motorTarget, "motor target");
+        number(d.swingNormalHalfCone, "swing angle");
+        number(d.swingPlaneHalfCone, "swing angle");
+        number(d.twistMin, "twist angle");
+        number(d.twistMax, "twist angle");
+        if (d.kind == ConstraintDef.Kind.SWING_TWIST) {
+            if (d.swingNormalHalfCone < 0 || d.swingNormalHalfCone > Math.PI || d.swingPlaneHalfCone < 0 || d.swingPlaneHalfCone > Math.PI) {
+                throw new PhysException("Swing angles must stay between 0 and 180 degrees.");
+            }
+            if (d.twistMin > d.twistMax || d.twistMin < -Math.PI || d.twistMax > Math.PI) {
+                throw new PhysException("Twist limits must stay between -180 and 180 degrees with min <= max.");
+            }
+        }
         if (d.limited && d.limitMin > d.limitMax) {
             throw new PhysException("Lower limit must not be greater than the upper limit.");
         }

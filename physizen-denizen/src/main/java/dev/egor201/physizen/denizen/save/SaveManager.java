@@ -9,6 +9,7 @@ import com.denizenscript.denizencore.objects.core.QuaternionTag;
 import com.denizenscript.denizencore.utilities.CoreUtilities;
 import dev.egor201.physizen.core.model.BodyDef;
 import dev.egor201.physizen.core.model.ConstraintDef;
+import dev.egor201.physizen.core.model.VehicleDef;
 import dev.egor201.physizen.core.model.MotionKind;
 import dev.egor201.physizen.bukkit.PhysizenServices;
 import dev.egor201.physizen.bukkit.display.DisplayBinder;
@@ -33,6 +34,7 @@ import org.joml.Vector3f;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
@@ -76,6 +78,10 @@ public final class SaveManager {
         map.putObject("notify", new ElementTag(body.def.notify));
         map.putObject("remove_on_fall", new ElementTag(body.def.removeOnFallOut));
         map.putObject("tag", new ElementTag(body.tag != null ? body.tag : ""));
+        if (body.def.ragdoll != null && !body.def.ragdoll.isEmpty()) {
+            map.putObject("ragdoll", new ElementTag(body.def.ragdoll));
+            map.putObject("ragdoll_index", new ElementTag(body.def.ragdollIndex));
+        }
         map.putObject("max_velocity", new ElementTag(body.def.maxLinearVelocity));
         map.putObject("max_angular_velocity", new ElementTag(body.def.maxAngularVelocity));
 
@@ -148,6 +154,15 @@ public final class SaveManager {
             }
         }
         root.putObject("constraints", constraintsList);
+
+        ListTag vehiclesList = new ListTag();
+        for (String vName : pw.vehicleNames()) {
+            VehicleDef vd = pw.vehicleDef(vName);
+            if (vd != null && included.contains(vd.body)) {
+                vehiclesList.addObject(VehicleCodec.toMap(vd));
+            }
+        }
+        root.putObject("vehicles", vehiclesList);
         return root;
     }
 
@@ -181,6 +196,8 @@ public final class SaveManager {
         def.notify = Args.bool(bMap.getObject("notify"), true);
         def.removeOnFallOut = Args.bool(bMap.getObject("remove_on_fall"), true);
         def.tag = Args.str(bMap.getObject("tag"), "");
+        def.ragdoll = Args.str(bMap.getObject("ragdoll"), "");
+        def.ragdollIndex = (int) Args.num(bMap.getObject("ragdoll_index"), -1);
         def.maxLinearVelocity = Args.num(bMap.getObject("max_velocity"), 500);
         def.maxAngularVelocity = Args.num(bMap.getObject("max_angular_velocity"), 47.1238898);
         return def;
@@ -218,6 +235,7 @@ public final class SaveManager {
         }
 
         List<String> createdNames = new ArrayList<>();
+        Map<String, Snapshot> placed = new HashMap<>();
 
         for (ObjectTag bodyTag : bodiesList.objectForms) {
             MapTag bMap = bodyTag.asType(MapTag.class, CoreUtilities.noDebugContext);
@@ -227,6 +245,9 @@ public final class SaveManager {
             String finalName = (overrideName != null && bodiesList.size() == 1) ? overrideName : prefix + baseName;
 
             BodyDef def = defFromMap(bMap, finalName);
+            if (def.ragdoll != null && !def.ragdoll.isEmpty()) {
+                def.ragdoll = prefix + def.ragdoll;
+            }
             double[] savedPos = def.position;
             double[] savedRot = def.rotation;
             def.linearVelocity = new double[3];
@@ -252,9 +273,11 @@ public final class SaveManager {
                 def.rotation = savedRot;
             }
 
-
             pw.createBody(def);
             createdNames.add(finalName);
+            placed.put(finalName, new Snapshot(def.position[0], def.position[1], def.position[2],
+                    (float) def.rotation[0], (float) def.rotation[1], (float) def.rotation[2], (float) def.rotation[3],
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, false, 0L));
 
             if (bMap.containsKey("displays") && bukkitWorld != null) {
                 ListTag displays = bMap.getObject("displays").asType(ListTag.class, CoreUtilities.noDebugContext);
@@ -301,41 +324,72 @@ public final class SaveManager {
                 if (cMap.containsKey("body_a")) def.bodyA = prefix + cMap.getElement("body_a").asString();
                 if (cMap.containsKey("body_b")) def.bodyB = prefix + cMap.getElement("body_b").asString();
 
-                double[] pa = Args.vec(cMap.getObject("point_a"), CoreUtilities.noDebugContext);
-                double[] pb = cMap.containsKey("point_b") ? Args.vec(cMap.getObject("point_b"), CoreUtilities.noDebugContext) : pa;
+                ConstraintCodec.applyCommon(def, cMap);
 
-                if (targetPos != null && origin != null) {
-                    double dxA = pa[0] - origin[0];
-                    double dyA = pa[1] - origin[1];
-                    double dzA = pa[2] - origin[2];
-                    double dxB = pb[0] - origin[0];
-                    double dyB = pb[1] - origin[1];
-                    double dzB = pb[2] - origin[2];
-                    if (rotQuat != null) {
-                        Vector3f rA = rotQuat.transform(new Vector3f((float) dxA, (float) dyA, (float) dzA));
-                        Vector3f rB = rotQuat.transform(new Vector3f((float) dxB, (float) dyB, (float) dzB));
-                        def.pointA = new double[]{targetPos[0] + rA.x, targetPos[1] + rA.y, targetPos[2] + rA.z};
-                        def.pointB = new double[]{targetPos[0] + rB.x, targetPos[1] + rB.y, targetPos[2] + rB.z};
-                        Vector3f ax = rotQuat.transform(new Vector3f((float) def.axis[0], (float) def.axis[1], (float) def.axis[2]));
-                        def.axis = new double[]{ax.x, ax.y, ax.z};
+                Snapshot snapA = def.bodyA == null ? null : placed.get(def.bodyA);
+                Snapshot snapB = def.bodyB == null ? null : placed.get(def.bodyB);
+                if (cMap.containsKey("local_a") && cMap.containsKey("local_b")
+                        && snapA != null && snapB != null) {
+                    def.pointA = ConstraintDef.toWorld(snapA, Args.vec(cMap.getObject("local_a"), CoreUtilities.noDebugContext));
+                    def.pointB = ConstraintDef.toWorld(snapB, Args.vec(cMap.getObject("local_b"), CoreUtilities.noDebugContext));
+                    if (cMap.containsKey("local_axis")) {
+                        def.axis = ConstraintDef.rotate(snapA, Args.vec(cMap.getObject("local_axis"), CoreUtilities.noDebugContext), false);
                     }
-                    else {
-                        def.pointA = new double[]{targetPos[0] + dxA, targetPos[1] + dyA, targetPos[2] + dzA};
-                        def.pointB = new double[]{targetPos[0] + dxB, targetPos[1] + dyB, targetPos[2] + dzB};
+                    if (cMap.containsKey("local_normal")) {
+                        def.normalAxis = ConstraintDef.rotate(snapA, Args.vec(cMap.getObject("local_normal"), CoreUtilities.noDebugContext), false);
                     }
                 }
                 else {
-                    def.pointA = pa;
-                    def.pointB = pb;
-                    if (cMap.containsKey("axis")) def.axis = Args.vec(cMap.getObject("axis"), CoreUtilities.noDebugContext);
+                    double[] pa = Args.vec(cMap.getObject("point_a"), CoreUtilities.noDebugContext);
+                    double[] pb = cMap.containsKey("point_b") ? Args.vec(cMap.getObject("point_b"), CoreUtilities.noDebugContext) : pa;
+                    double[] ax = cMap.containsKey("axis") ? Args.vec(cMap.getObject("axis"), CoreUtilities.noDebugContext) : def.axis;
+                    double[] nm = cMap.containsKey("normal") ? Args.vec(cMap.getObject("normal"), CoreUtilities.noDebugContext) : def.normalAxis;
+                    if (targetPos != null && origin != null) {
+                        def.pointA = transformPoint(pa, origin, targetPos, rotQuat);
+                        def.pointB = transformPoint(pb, origin, targetPos, rotQuat);
+                        def.axis = transformDir(ax, rotQuat);
+                        def.normalAxis = transformDir(nm, rotQuat);
+                    }
+                    else {
+                        def.pointA = pa;
+                        def.pointB = pb;
+                        def.axis = ax;
+                        def.normalAxis = nm;
+                    }
                 }
-
-                ConstraintCodec.applyCommon(def, cMap);
 
                 pw.addConstraint(def);
             }
         }
+
+        if (root.containsKey("vehicles")) {
+            ListTag vehicles = root.getObject("vehicles").asType(ListTag.class, CoreUtilities.noDebugContext);
+            for (ObjectTag vObj : vehicles.objectForms) {
+                MapTag vMap = vObj.asType(MapTag.class, CoreUtilities.noDebugContext);
+                if (vMap == null) continue;
+                pw.addVehicle(VehicleCodec.fromMap(vMap, prefix));
+            }
+        }
         return createdNames;
+    }
+
+    private static double[] transformPoint(double[] p, double[] origin, double[] target, Quaternionf rot) {
+        double dx = p[0] - origin[0];
+        double dy = p[1] - origin[1];
+        double dz = p[2] - origin[2];
+        if (rot != null) {
+            Vector3f r = rot.transform(new Vector3f((float) dx, (float) dy, (float) dz));
+            return new double[]{target[0] + r.x, target[1] + r.y, target[2] + r.z};
+        }
+        return new double[]{target[0] + dx, target[1] + dy, target[2] + dz};
+    }
+
+    private static double[] transformDir(double[] v, Quaternionf rot) {
+        if (rot == null) {
+            return v.clone();
+        }
+        Vector3f r = rot.transform(new Vector3f((float) v[0], (float) v[1], (float) v[2]));
+        return new double[]{r.x, r.y, r.z};
     }
 
     public static DisplayBinder.Binding bindingFromMap(MapTag dMap, Entity entity) {
