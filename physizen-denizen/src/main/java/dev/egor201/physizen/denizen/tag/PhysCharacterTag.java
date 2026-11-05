@@ -397,4 +397,8 @@ public class PhysCharacterTag implements ObjectTag {
     public String debuggable() {
         return "<LG>physcharacter@<Y>" + worldId + "<LG>/<Y>" + name;
     }
+    @Override
+    public String identifySimple() {
+        return identify();
+    }
 }

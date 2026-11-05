@@ -104,6 +104,11 @@ public class PhysWorldTag implements ObjectTag {
         return tagProcessor.getObjectAttribute(this, attribute);
     }
 
+    @Override
+    public String identifySimple() {
+        return identify();
+    }
+
     private static QueryFilter filterOf(ListTag param, int index, TagContext context) {
         QueryFilter filter = new QueryFilter();
         if (param.size() <= index) {

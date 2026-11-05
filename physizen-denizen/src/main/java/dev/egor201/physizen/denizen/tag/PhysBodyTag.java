@@ -593,4 +593,8 @@ public class PhysBodyTag implements ObjectTag {
     public String debuggable() {
         return "<LG>physbody@<Y>" + worldId + "<LG>/<Y>" + name;
     }
+    @Override
+    public String identifySimple() {
+        return identify();
+    }
 }
