@@ -70,7 +70,6 @@ public class PhysWorldCommand extends AbstractCommand {
             @ArgName("max") @ArgPrefixed @ArgDefaultNull ObjectTag maxArg,
             @ArgName("file") @ArgPrefixed @ArgDefaultNull ElementTag fileArg) {
         ElementTag idValue = idArg != null ? idArg : idLinear;
-        ElementTag action = actionArg;
         ElementTag idTag = idValue;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physworld command.");

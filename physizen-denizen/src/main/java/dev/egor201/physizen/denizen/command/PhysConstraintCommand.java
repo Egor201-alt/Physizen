@@ -80,7 +80,6 @@ public class PhysConstraintCommand extends AbstractCommand {
             @ArgName("swing") @ArgPrefixed @ArgDefaultNull ObjectTag swingArg,
             @ArgName("twist") @ArgPrefixed @ArgDefaultNull ObjectTag twistArg,
             @ArgName("friction") @ArgPrefixed @ArgDefaultNull ObjectTag frictionArg) {
-        ElementTag action = actionArg;
         ElementTag nameTag = nameArg;
         if (action == null || nameTag == null) {
             Debug.echoError(scriptEntry, "physconstraint needs action and name:<name>.");

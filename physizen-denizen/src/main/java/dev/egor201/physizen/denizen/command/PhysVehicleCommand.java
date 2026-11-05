@@ -96,7 +96,6 @@ public class PhysVehicleCommand extends AbstractCommand {
             @ArgName("interpolation") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationArg,
             @ArgName("teleport_duration") @ArgPrefixed @ArgDefaultNull ObjectTag teleportDurationArg,
             @ArgName("remove_with_body") @ArgPrefixed @ArgDefaultNull ObjectTag removeWithBodyArg) {
-        ElementTag action = actionArg;
         ElementTag nameTag = nameArg;
         if (action == null || nameTag == null) {
             Debug.echoError(scriptEntry, "physvehicle needs an action and name:<name>.");
@@ -153,7 +152,7 @@ public class PhysVehicleCommand extends AbstractCommand {
                 w.setVehicleInput(name, throttle, steer, brake, handbrake);
                 return;
             }
-            if (!action == Action.CREATE) {
+            if (action != Action.CREATE) {
                 throw new PhysException("Unknown physvehicle action '" + act + "', expected create, remove, input, bind or unbind.");
             }
             if (!(bodyArg != null)) {

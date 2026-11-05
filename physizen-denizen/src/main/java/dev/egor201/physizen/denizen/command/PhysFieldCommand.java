@@ -53,7 +53,6 @@ public class PhysFieldCommand extends AbstractCommand {
             @ArgName("drag") @ArgPrefixed @ArgDefaultNull ObjectTag dragArg,
             @ArgName("mass_independent") @ArgPrefixed @ArgDefaultNull ObjectTag massIndependentArg,
             @ArgName("group") @ArgPrefixed @ArgDefaultNull ObjectTag groupArg) {
-        ElementTag action = actionArg;
         ElementTag nameTag = nameArg;
         if (action == null || nameTag == null) {
             Debug.echoError(scriptEntry, "physfield needs action and name:<name>.");

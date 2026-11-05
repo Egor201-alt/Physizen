@@ -49,7 +49,6 @@ public class PhysForceCommand extends AbstractCommand {
             @ArgName("vector") @ArgPrefixed @ArgDefaultNull ObjectTag vectorArg,
             @ArgName("point") @ArgPrefixed @ArgDefaultNull ObjectTag pointArg) {
         ElementTag bodyValue = bodyArg != null ? bodyArg : bodyLinear;
-        ElementTag action = actionArg;
         ElementTag bodyName = bodyValue;
         if (action == null || bodyName == null) {
             Debug.echoError(scriptEntry, "physforce needs action and body:<name>.");

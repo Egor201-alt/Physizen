@@ -102,7 +102,6 @@ public class PhysBodyCommand extends AbstractCommand {
             @ArgName("bodies") @ArgPrefixed @ArgDefaultNull ObjectTag bodiesArg,
             @ArgName("prefix") @ArgPrefixed @ArgDefaultNull ElementTag prefixArg) {
         ElementTag nameValue = nameArg != null ? nameArg : nameLinear;
-        ElementTag action = actionArg;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physbody command.");
             return;
@@ -111,7 +110,7 @@ public class PhysBodyCommand extends AbstractCommand {
         String worldId = (worldArg != null) ? worldArg.asString() : "default";
         String name = (nameValue != null) ? nameValue.asString() : null;
 
-        if (name == null && !action == Action.LOAD && !action == Action.PASTE && !action == Action.SPAWN && !action == Action.SAVE) {
+        if (name == null && action != Action.LOAD && action != Action.PASTE && action != Action.SPAWN && action != Action.SAVE) {
             Debug.echoError(scriptEntry, "physbody " + act + " needs name:<id>.");
             return;
         }

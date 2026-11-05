@@ -88,7 +88,6 @@ public class PhysHitboxCommand extends AbstractCommand {
             @ArgName("push") @ArgPrefixed @ArgDefaultNull ObjectTag pushArg,
             @ArgName("entity") @ArgPrefixed @ArgDefaultNull ObjectTag entityArg,
             @ArgName("player") @ArgPrefixed @ArgDefaultNull ObjectTag playerArg) {
-        ElementTag action = actionArg;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physhitbox command.");
             return;

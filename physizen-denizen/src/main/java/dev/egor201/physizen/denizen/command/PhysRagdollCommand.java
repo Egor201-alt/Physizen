@@ -114,7 +114,6 @@ public class PhysRagdollCommand extends AbstractCommand {
             @ArgName("interpolation") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationArg,
             @ArgName("teleport_duration") @ArgPrefixed @ArgDefaultNull ObjectTag teleportDurationArg,
             @ArgName("remove_with_body") @ArgPrefixed @ArgDefaultNull ObjectTag removeWithBodyArg) {
-        ElementTag action = actionArg;
         ElementTag nameTag = nameArg;
         if (action == null || nameTag == null) {
             Debug.echoError(scriptEntry, "physragdoll needs an action and name:<name>.");
@@ -155,7 +154,7 @@ public class PhysRagdollCommand extends AbstractCommand {
                 }
                 return;
             }
-            if (!action == Action.CREATE) {
+            if (action != Action.CREATE) {
                 throw new PhysException("Unknown physragdoll action '" + act + "', expected create, remove, bind or unbind.");
             }
             RagdollSpec spec;

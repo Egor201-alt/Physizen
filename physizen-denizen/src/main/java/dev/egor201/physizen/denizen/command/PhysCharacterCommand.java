@@ -96,7 +96,6 @@ public class PhysCharacterCommand extends AbstractCommand {
             @ArgName("tag") @ArgPrefixed @ArgDefaultNull ObjectTag tagArg,
             @ArgName("player") @ArgPrefixed @ArgDefaultNull ObjectTag playerArg) {
         ElementTag nameValue = nameArg != null ? nameArg : nameLinear;
-        ElementTag action = actionArg;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physcharacter command.");
             return;
