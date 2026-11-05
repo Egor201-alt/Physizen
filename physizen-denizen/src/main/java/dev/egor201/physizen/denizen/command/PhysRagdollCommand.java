@@ -1,8 +1,10 @@
 package dev.egor201.physizen.denizen.command;
 
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
@@ -35,24 +37,8 @@ public class PhysRagdollCommand extends AbstractCommand {
         setSyntax("physragdoll [create/remove/bind/unbind] (world:<world>) name:<name> (preset:<humanoid>) (bones:<list of maps>) (position:<loc>) (rotation:<rotation>) (scale:<number>) (mass:<number>) (velocity:<vec>) (friction:<number>) (restitution:<number>) (linear_damping:<number>) (angular_damping:<number>) (group:<0-15>) (joint_friction:<number>) (entities:<map of bone to entity>) (offset:<vec>) (scale:<vec>) (rotation_offset:<rotation>) (interpolation:<ticks>) (teleport_duration:<ticks>) (remove_with_body:<boolean>)");
         setRequiredArguments(2, 24);
         isProcedural = false;
-    }
-
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action") && arg.prefix == null) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("name") && arg.matchesPrefix("name", "id")) {
-                scriptEntry.addObject("name", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
-                scriptEntry.addObject("world", arg.asElement());
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+        autoCompile();
+        addRemappedPrefixes("name", "id");
     }
 
     private static double[] pairOrDefault(MapTag map, String key, double a, double b) {
@@ -94,33 +80,65 @@ public class PhysRagdollCommand extends AbstractCommand {
         return spec;
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
-        ElementTag nameTag = scriptEntry.getElement("name");
+    public enum Action {
+        REMOVE, UNBIND, BIND, CREATE
+    }
+
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("name") @ArgPrefixed @ArgDefaultNull ElementTag nameArg,
+            @ArgName("world") @ArgPrefixed @ArgDefaultNull ElementTag worldArg,
+            @ArgName("shape") @ArgPrefixed @ArgDefaultNull ObjectTag shapeArg,
+            @ArgName("center") @ArgPrefixed @ArgDefaultNull ObjectTag centerArg,
+            @ArgName("anchor") @ArgPrefixed @ArgDefaultNull ObjectTag anchorArg,
+            @ArgName("twist_axis") @ArgPrefixed @ArgDefaultNull ObjectTag twistAxisArg,
+            @ArgName("plane_axis") @ArgPrefixed @ArgDefaultNull ObjectTag planeAxisArg,
+            @ArgName("entities") @ArgPrefixed @ArgDefaultNull ObjectTag entitiesArg,
+            @ArgName("bones") @ArgPrefixed @ArgDefaultNull ObjectTag bonesArg,
+            @ArgName("preset") @ArgPrefixed @ArgDefaultNull ElementTag presetArg,
+            @ArgName("humanoid") @ArgPrefixed @ArgDefaultNull ObjectTag humanoidArg,
+            @ArgName("position") @ArgPrefixed @ArgDefaultNull ObjectTag positionArg,
+            @ArgName("rotation") @ArgPrefixed @ArgDefaultNull ObjectTag rotationArg,
+            @ArgName("velocity") @ArgPrefixed @ArgDefaultNull ObjectTag velocityArg,
+            @ArgName("scale") @ArgPrefixed @ArgDefaultNull ObjectTag scaleArg,
+            @ArgName("mass") @ArgPrefixed @ArgDefaultNull ObjectTag massArg,
+            @ArgName("friction") @ArgPrefixed @ArgDefaultNull ObjectTag frictionArg,
+            @ArgName("restitution") @ArgPrefixed @ArgDefaultNull ObjectTag restitutionArg,
+            @ArgName("linear_damping") @ArgPrefixed @ArgDefaultNull ObjectTag linearDampingArg,
+            @ArgName("angular_damping") @ArgPrefixed @ArgDefaultNull ObjectTag angularDampingArg,
+            @ArgName("joint_friction") @ArgPrefixed @ArgDefaultNull ObjectTag jointFrictionArg,
+            @ArgName("group") @ArgPrefixed @ArgDefaultNull ObjectTag groupArg,
+            @ArgName("offset") @ArgPrefixed @ArgDefaultNull ObjectTag offsetArg,
+            @ArgName("rotation_offset") @ArgPrefixed @ArgDefaultNull ObjectTag rotationOffsetArg,
+            @ArgName("interpolation_duration") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationDurationArg,
+            @ArgName("interpolation") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationArg,
+            @ArgName("teleport_duration") @ArgPrefixed @ArgDefaultNull ObjectTag teleportDurationArg,
+            @ArgName("remove_with_body") @ArgPrefixed @ArgDefaultNull ObjectTag removeWithBodyArg) {
+        ElementTag action = actionArg;
+        ElementTag nameTag = nameArg;
         if (action == null || nameTag == null) {
             Debug.echoError(scriptEntry, "physragdoll needs an action and name:<name>.");
             return;
         }
-        String act = CoreUtilities.toLowerCase(action.asString());
-        String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : "default";
+        String act = action.name().toLowerCase();
+        String worldId = (worldArg != null) ? worldArg.asString() : "default";
         try {
             PhysWorld w = Args.world(worldId);
-            if (act.equals("remove")) {
+            if (action == Action.REMOVE) {
                 w.removeRagdoll(nameTag.asString());
                 return;
             }
-            if (act.equals("unbind")) {
+            if (action == Action.UNBIND) {
                 for (String part : w.ragdollParts(nameTag.asString())) {
                     PhysizenServices.get().displays.unbindAll(worldId, part);
                 }
                 return;
             }
-            if (act.equals("bind")) {
-                if (!scriptEntry.hasObject("entities")) {
+            if (action == Action.BIND) {
+                if (!(entitiesArg != null)) {
                     throw new PhysException("physragdoll bind needs entities:<map of bone to entity>.");
                 }
-                MapTag map = ((ObjectTag) scriptEntry.getObjectTag("entities")).asType(MapTag.class, scriptEntry.context);
+                MapTag map = ((ObjectTag) entitiesArg).asType(MapTag.class, scriptEntry.context);
                 if (map == null || map.map.isEmpty()) {
                     throw new PhysException("entities must be a non-empty map of bone to entity.");
                 }
@@ -132,24 +150,24 @@ public class PhysRagdollCommand extends AbstractCommand {
                         throw new PhysException("Ragdoll '" + nameTag.asString() + "' has no bone '" + bone + "'.");
                     }
                     for (EntityTag et : Args.entities(map.getObject(bone), scriptEntry.context)) {
-                        PhysizenServices.get().displays.bind(worldId, part, BindingArgs.create(et, scriptEntry));
+                        PhysizenServices.get().displays.bind(worldId, part, BindingArgs.create(et, scriptEntry, offsetArg, scaleArg, rotationOffsetArg, interpolationDurationArg, interpolationArg, teleportDurationArg, removeWithBodyArg));
                     }
                 }
                 return;
             }
-            if (!act.equals("create")) {
+            if (!action == Action.CREATE) {
                 throw new PhysException("Unknown physragdoll action '" + act + "', expected create, remove, bind or unbind.");
             }
             RagdollSpec spec;
-            if (scriptEntry.hasObject("bones")) {
-                ListTag bones = ((ObjectTag) scriptEntry.getObjectTag("bones")).asType(ListTag.class, scriptEntry.context);
+            if (bonesArg != null) {
+                ListTag bones = ((ObjectTag) bonesArg).asType(ListTag.class, scriptEntry.context);
                 if (bones == null || bones.isEmpty()) {
                     throw new PhysException("bones must be a non-empty list of maps.");
                 }
                 spec = customSpec(bones, scriptEntry);
             }
             else {
-                String preset = scriptEntry.hasObject("preset") ? CoreUtilities.toLowerCase(scriptEntry.getElement("preset").asString()) : "humanoid";
+                String preset = (presetArg != null) ? CoreUtilities.toLowerCase(presetArg.asString()) : "humanoid";
                 if (!preset.equals("humanoid")) {
                     throw new PhysException("Unknown ragdoll preset '" + preset + "', expected humanoid.");
                 }
@@ -157,21 +175,22 @@ public class PhysRagdollCommand extends AbstractCommand {
             }
             RagdollBuilder.Options o = new RagdollBuilder.Options();
             o.id = nameTag.asString();
-            if (scriptEntry.hasObject("position")) o.position = Args.vec(scriptEntry.getObjectTag("position"), scriptEntry.context);
-            if (scriptEntry.hasObject("rotation")) o.rotation = Args.rotation(scriptEntry.getObjectTag("rotation"), scriptEntry.context);
-            if (scriptEntry.hasObject("velocity")) o.velocity = Args.vec(scriptEntry.getObjectTag("velocity"), scriptEntry.context);
-            o.scale = Args.num(scriptEntry.getObjectTag("scale"), o.scale);
-            o.totalMass = Args.num(scriptEntry.getObjectTag("mass"), o.totalMass);
-            o.friction = Args.num(scriptEntry.getObjectTag("friction"), o.friction);
-            o.restitution = Args.num(scriptEntry.getObjectTag("restitution"), o.restitution);
-            o.linearDamping = Args.num(scriptEntry.getObjectTag("linear_damping"), o.linearDamping);
-            o.angularDamping = Args.num(scriptEntry.getObjectTag("angular_damping"), o.angularDamping);
-            o.jointFriction = Args.num(scriptEntry.getObjectTag("joint_friction"), o.jointFriction);
-            o.group = (int) Args.num(scriptEntry.getObjectTag("group"), o.group);
+            if (positionArg != null) o.position = Args.vec(positionArg, scriptEntry.context);
+            if (rotationArg != null) o.rotation = Args.rotation(rotationArg, scriptEntry.context);
+            if (velocityArg != null) o.velocity = Args.vec(velocityArg, scriptEntry.context);
+            o.scale = Args.num(scaleArg, o.scale);
+            o.totalMass = Args.num(massArg, o.totalMass);
+            o.friction = Args.num(frictionArg, o.friction);
+            o.restitution = Args.num(restitutionArg, o.restitution);
+            o.linearDamping = Args.num(linearDampingArg, o.linearDamping);
+            o.angularDamping = Args.num(angularDampingArg, o.angularDamping);
+            o.jointFriction = Args.num(jointFrictionArg, o.jointFriction);
+            o.group = (int) Args.num(groupArg, o.group);
             w.spawnRagdoll(spec, o);
         }
         catch (PhysException | IllegalArgumentException e) {
             Debug.echoError(scriptEntry, e.getMessage());
         }
     }
+
 }

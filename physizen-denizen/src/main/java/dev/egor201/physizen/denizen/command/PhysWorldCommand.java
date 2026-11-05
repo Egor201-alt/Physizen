@@ -3,8 +3,11 @@ package dev.egor201.physizen.denizen.command;
 import dev.egor201.physizen.denizen.args.Args;
 import dev.egor201.physizen.denizen.args.ShapeParser;
 
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
+import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
@@ -39,143 +42,152 @@ public class PhysWorldCommand extends AbstractCommand {
         setSyntax("physworld [create/remove/pause/resume/step/clear/gravity/time_scale/rate/collision/explosion/terrain/refresh/save/load] (id:<id>) ...");
         setRequiredArguments(1, 12);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("id", "world");
     }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action")) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("id") && (arg.matchesPrefix("id", "world") || !arg.hasPrefix())) {
-                scriptEntry.addObject("id", arg.asElement());
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+    public enum Action {
+        CREATE, REMOVE, PAUSE, RESUME, STEP, CLEAR, GRAVITY, TIME_SCALE, RATE, COLLISION, EXPLOSION, TERRAIN, REFRESH, SAVE, LOAD
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
-        ElementTag idTag = scriptEntry.getElement("id");
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("id_linear") @ArgLinear @ArgDefaultNull ElementTag idLinear,
+            @ArgName("id") @ArgPrefixed @ArgDefaultNull ElementTag idArg,
+            @ArgName("rate") @ArgPrefixed @ArgDefaultNull ObjectTag rateArg,
+            @ArgName("gravity") @ArgPrefixed @ArgDefaultNull ObjectTag gravityArg,
+            @ArgName("attach") @ArgPrefixed @ArgDefaultNull ObjectTag attachArg,
+            @ArgName("count") @ArgPrefixed @ArgDefaultNull ObjectTag countArg,
+            @ArgName("value") @ArgPrefixed @ArgDefaultNull ObjectTag valueArg,
+            @ArgName("group_a") @ArgPrefixed @ArgDefaultNull ObjectTag groupAArg,
+            @ArgName("group_b") @ArgPrefixed @ArgDefaultNull ObjectTag groupBArg,
+            @ArgName("enable") @ArgPrefixed @ArgDefaultNull ObjectTag enableArg,
+            @ArgName("center") @ArgPrefixed @ArgDefaultNull ObjectTag centerArg,
+            @ArgName("radius") @ArgPrefixed @ArgDefaultNull ObjectTag radiusArg,
+            @ArgName("impulse") @ArgPrefixed @ArgDefaultNull ObjectTag impulseArg,
+            @ArgName("upward") @ArgPrefixed @ArgDefaultNull ObjectTag upwardArg,
+            @ArgName("min") @ArgPrefixed @ArgDefaultNull ObjectTag minArg,
+            @ArgName("max") @ArgPrefixed @ArgDefaultNull ObjectTag maxArg,
+            @ArgName("file") @ArgPrefixed @ArgDefaultNull ElementTag fileArg) {
+        ElementTag idValue = idArg != null ? idArg : idLinear;
+        ElementTag action = actionArg;
+        ElementTag idTag = idValue;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physworld command.");
             return;
         }
-        String act = action.asString().toLowerCase();
+        String act = action.name().toLowerCase();
         String id = idTag != null ? idTag.asString() : "default";
 
         try {
-            switch (act) {
-                case "create": {
+            switch (action) {
+                case CREATE: {
                     PhysEngine engine = PhysEngine.get();
                     PhysWorld w = engine.world(id);
                     if (w == null) {
-                        int rate = scriptEntry.hasObject("rate") ? (int) Args.num(scriptEntry.getObjectTag("rate"), engine.config().tickRate) : engine.config().tickRate;
+                        int rate = (rateArg != null) ? (int) Args.num(rateArg, engine.config().tickRate) : engine.config().tickRate;
                         w = engine.createWorld(id, rate);
                     }
-                    else if (scriptEntry.hasObject("rate")) {
-                        w.setStepRate((int) Args.num(scriptEntry.getObjectTag("rate"), engine.config().tickRate));
+                    else if (rateArg != null) {
+                        w.setStepRate((int) Args.num(rateArg, engine.config().tickRate));
                     }
-                    if (scriptEntry.hasObject("gravity")) {
-                        w.setGravity(Args.vec(scriptEntry.getObjectTag("gravity"), scriptEntry.context));
+                    if (gravityArg != null) {
+                        w.setGravity(Args.vec(gravityArg, scriptEntry.context));
                     }
-                    if (scriptEntry.hasObject("attach")) {
-                        World bw = Bukkit.getWorld(scriptEntry.getObjectTag("attach").toString());
+                    if (attachArg != null) {
+                        World bw = Bukkit.getWorld(attachArg.toString());
                         if (bw != null) {
                             PhysizenServices.get().worlds.attach(id, bw);
                         }
                     }
                     break;
                 }
-                case "remove": {
+                case REMOVE: {
                     PhysEngine.get().removeWorld(id);
                     break;
                 }
-                case "pause": {
+                case PAUSE: {
                     Args.world(id).setPaused(true);
                     break;
                 }
-                case "resume": {
+                case RESUME: {
                     Args.world(id).setPaused(false);
                     break;
                 }
-                case "step": {
-                    int count = scriptEntry.hasObject("count") ? (int) Args.num(scriptEntry.getObjectTag("count"), 1) : 1;
+                case STEP: {
+                    int count = (countArg != null) ? (int) Args.num(countArg, 1) : 1;
                     Args.world(id).singleStep(count);
                     break;
                 }
-                case "clear": {
+                case CLEAR: {
                     Args.world(id).clear();
                     break;
                 }
-                case "gravity": {
-                    if (!scriptEntry.hasObject("value")) {
+                case GRAVITY: {
+                    if (!(valueArg != null)) {
                         Debug.echoError(scriptEntry, "physworld gravity needs value:<vector>.");
                         return;
                     }
-                    Args.world(id).setGravity(Args.vec(scriptEntry.getObjectTag("value"), scriptEntry.context));
+                    Args.world(id).setGravity(Args.vec(valueArg, scriptEntry.context));
                     break;
                 }
-                case "time_scale": {
-                    if (!scriptEntry.hasObject("value")) {
+                case TIME_SCALE: {
+                    if (!(valueArg != null)) {
                         Debug.echoError(scriptEntry, "physworld time_scale needs value:<number>.");
                         return;
                     }
-                    Args.world(id).setTimeScale(Args.num(scriptEntry.getObjectTag("value"), 1.0));
+                    Args.world(id).setTimeScale(Args.num(valueArg, 1.0));
                     break;
                 }
-                case "rate": {
-                    if (!scriptEntry.hasObject("value")) {
+                case RATE: {
+                    if (!(valueArg != null)) {
                         Debug.echoError(scriptEntry, "physworld rate needs value:<number>.");
                         return;
                     }
-                    Args.world(id).setStepRate((int) Args.num(scriptEntry.getObjectTag("value"), 60));
+                    Args.world(id).setStepRate((int) Args.num(valueArg, 60));
                     break;
                 }
-                case "collision": {
-                    int a = (int) Args.num(scriptEntry.getObjectTag("group_a"), 0);
-                    int b = (int) Args.num(scriptEntry.getObjectTag("group_b"), 0);
-                    boolean enable = Args.bool(scriptEntry.getObjectTag("enable"), true);
+                case COLLISION: {
+                    int a = (int) Args.num(groupAArg, 0);
+                    int b = (int) Args.num(groupBArg, 0);
+                    boolean enable = Args.bool(enableArg, true);
                     Args.world(id).setGroupCollision(a, b, enable);
                     break;
                 }
-                case "explosion": {
-                    if (!scriptEntry.hasObject("center")) {
+                case EXPLOSION: {
+                    if (!(centerArg != null)) {
                         Debug.echoError(scriptEntry, "physworld explosion needs center:<location>.");
                         return;
                     }
-                    double[] c = Args.vec(scriptEntry.getObjectTag("center"), scriptEntry.context);
-                    double r = Args.num(scriptEntry.getObjectTag("radius"), 5.0);
-                    double imp = Args.num(scriptEntry.getObjectTag("impulse"), 50.0);
-                    double up = Args.num(scriptEntry.getObjectTag("upward"), 0.2);
+                    double[] c = Args.vec(centerArg, scriptEntry.context);
+                    double r = Args.num(radiusArg, 5.0);
+                    double imp = Args.num(impulseArg, 50.0);
+                    double up = Args.num(upwardArg, 0.2);
                     Args.world(id).explosion(c, r, imp, up);
                     break;
                 }
-                case "terrain": {
-                    if (scriptEntry.hasObject("attach")) {
-                        World bw = Bukkit.getWorld(scriptEntry.getObjectTag("attach").toString());
+                case TERRAIN: {
+                    if (attachArg != null) {
+                        World bw = Bukkit.getWorld(attachArg.toString());
                         if (bw != null) {
                             PhysizenServices.get().worlds.attach(id, bw);
                         }
                     }
                     break;
                 }
-                case "refresh": {
+                case REFRESH: {
                     Args.world(id);
                     double[] min;
                     double[] max;
-                    if (scriptEntry.hasObject("min") && scriptEntry.hasObject("max")) {
-                        double[] a = Args.vec(scriptEntry.getObjectTag("min"), scriptEntry.context);
-                        double[] b = Args.vec(scriptEntry.getObjectTag("max"), scriptEntry.context);
+                    if ((minArg != null) && (maxArg != null)) {
+                        double[] a = Args.vec(minArg, scriptEntry.context);
+                        double[] b = Args.vec(maxArg, scriptEntry.context);
                         min = new double[]{Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])};
                         max = new double[]{Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])};
                     }
-                    else if (scriptEntry.hasObject("center")) {
-                        double[] c = Args.vec(scriptEntry.getObjectTag("center"), scriptEntry.context);
-                        double r = Args.num(scriptEntry.getObjectTag("radius"), 1.0);
+                    else if (centerArg != null) {
+                        double[] c = Args.vec(centerArg, scriptEntry.context);
+                        double r = Args.num(radiusArg, 1.0);
                         min = new double[]{c[0] - r, c[1] - r, c[2] - r};
                         max = new double[]{c[0] + r, c[1] + r, c[2] + r};
                     }
@@ -186,12 +198,12 @@ public class PhysWorldCommand extends AbstractCommand {
                     PhysizenServices.get().terrain.invalidateArea(id, min, max);
                     break;
                 }
-                case "save": {
-                    if (!scriptEntry.hasObject("file")) {
+                case SAVE: {
+                    if (!(fileArg != null)) {
                         Debug.echoError(scriptEntry, "physworld save needs file:<filename>.");
                         return;
                     }
-                    String fileName = scriptEntry.getElement("file").asString();
+                    String fileName = fileArg.asString();
                     PhysWorld pw = Args.world(id);
                     List<String> bodyNames = new ArrayList<>();
                     for (PhysBody pb : pw.bodies()) {
@@ -203,12 +215,12 @@ public class PhysWorldCommand extends AbstractCommand {
                     PrefabFiles.saveToFile(root, fileName);
                     break;
                 }
-                case "load": {
-                    if (!scriptEntry.hasObject("file")) {
+                case LOAD: {
+                    if (!(fileArg != null)) {
                         Debug.echoError(scriptEntry, "physworld load needs file:<filename>.");
                         return;
                     }
-                    String fileName = scriptEntry.getElement("file").asString();
+                    String fileName = fileArg.asString();
                     MapTag root = PrefabFiles.loadFromFile(fileName);
                     SaveManager.spawnPrefab(id, root, null, null, "", null);
                     break;
@@ -222,4 +234,5 @@ public class PhysWorldCommand extends AbstractCommand {
             Debug.echoError(scriptEntry, e.getMessage());
         }
     }
+
 }

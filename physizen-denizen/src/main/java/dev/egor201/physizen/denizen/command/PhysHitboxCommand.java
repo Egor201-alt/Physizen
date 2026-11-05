@@ -5,9 +5,11 @@ import dev.egor201.physizen.denizen.args.ShapeParser;
 
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
@@ -60,47 +62,51 @@ public class PhysHitboxCommand extends AbstractCommand {
         setSyntax("physhitbox [attach/detach] (player:<player>) (entity:<entity>) (push:<number>) (world:<physworld>) (name:<name>) (shape:<shape>) (offset:<vector>) (follow_rotation:<true/false>) (group:<0-15>) (sensor:<true/false>) (notify:<true/false>) (friction:<number>) (restitution:<number>) (tag:<text>)");
         setRequiredArguments(1, 18);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("name", "body");
     }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action")) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("name") && arg.matchesPrefix("name", "body")) {
-                scriptEntry.addObject("name", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
-                scriptEntry.addObject("world", arg.asElement());
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+    public enum Action {
+        ATTACH, DETACH
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("name") @ArgPrefixed @ArgDefaultNull ElementTag nameArg,
+            @ArgName("world") @ArgPrefixed @ArgDefaultNull ElementTag worldArg,
+            @ArgName("shape") @ArgPrefixed @ArgDefaultNull ObjectTag shapeArg,
+            @ArgName("offset") @ArgPrefixed @ArgDefaultNull ObjectTag offsetArg,
+            @ArgName("follow_rotation") @ArgPrefixed @ArgDefaultNull ObjectTag followRotationArg,
+            @ArgName("friction") @ArgPrefixed @ArgDefaultNull ObjectTag frictionArg,
+            @ArgName("restitution") @ArgPrefixed @ArgDefaultNull ObjectTag restitutionArg,
+            @ArgName("group") @ArgPrefixed @ArgDefaultNull ObjectTag groupArg,
+            @ArgName("sensor") @ArgPrefixed @ArgDefaultNull ObjectTag sensorArg,
+            @ArgName("notify") @ArgPrefixed @ArgDefaultNull ObjectTag notifyArg,
+            @ArgName("detect_static") @ArgPrefixed @ArgDefaultNull ObjectTag detectStaticArg,
+            @ArgName("notify_persist") @ArgPrefixed @ArgDefaultNull ObjectTag notifyPersistArg,
+            @ArgName("tag") @ArgPrefixed @ArgDefaultNull ObjectTag tagArg,
+            @ArgName("push") @ArgPrefixed @ArgDefaultNull ObjectTag pushArg,
+            @ArgName("entity") @ArgPrefixed @ArgDefaultNull ObjectTag entityArg,
+            @ArgName("player") @ArgPrefixed @ArgDefaultNull ObjectTag playerArg) {
+        ElementTag action = actionArg;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physhitbox command.");
             return;
         }
-        String act = action.asString().toLowerCase();
+        String act = action.name().toLowerCase();
 
         try {
-            Entity subject = resolveSubject(scriptEntry);
+            Entity subject = resolveSubject(scriptEntry, entityArg, playerArg);
             if (subject == null) {
                 Debug.echoError(scriptEntry, "physhitbox needs player:<player>, entity:<entity> or a linked player.");
                 return;
             }
             HitboxManager manager = PhysizenServices.get().hitboxes;
-            String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : null;
-            String name = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
+            String worldId = (worldArg != null) ? worldArg.asString() : null;
+            String name = (nameArg != null) ? nameArg.asString() : null;
 
-            switch (act) {
-                case "attach": {
+            switch (action) {
+                case ATTACH: {
                     Entity player = subject;
                     if (!player.isValid() || (player instanceof Player && !((Player) player).isOnline())) {
                         throw new PhysException("The entity is not available.");
@@ -116,17 +122,17 @@ public class PhysHitboxCommand extends AbstractCommand {
                         name = "hitbox_" + (player instanceof Player ? player.getName() : player.getUniqueId().toString().substring(0, 8));
                     }
 
-                    ShapeSpec shape = scriptEntry.hasObject("shape")
-                            ? ShapeParser.shape(scriptEntry.getObjectTag("shape"), scriptEntry.context)
+                    ShapeSpec shape = (shapeArg != null)
+                            ? ShapeParser.shape(shapeArg, scriptEntry.context)
                             : ShapeParser.shape(new ElementTag("capsule:0.3,1.8"), scriptEntry.context);
                     double[] offset;
-                    if (scriptEntry.hasObject("offset")) {
-                        offset = Args.vec(scriptEntry.getObjectTag("offset"), scriptEntry.context);
+                    if (offsetArg != null) {
+                        offset = Args.vec(offsetArg, scriptEntry.context);
                     }
                     else {
                         offset = new double[]{0, shape.halfExtentsEstimate()[1], 0};
                     }
-                    boolean follow = Args.bool(scriptEntry.getObjectTag("follow_rotation"), false);
+                    boolean follow = Args.bool(followRotationArg, false);
 
                     Location loc = player.getLocation();
                     BodyDef def = new BodyDef();
@@ -134,24 +140,24 @@ public class PhysHitboxCommand extends AbstractCommand {
                     def.shape = shape;
                     def.type = MotionKind.KINEMATIC;
                     def.position = new double[]{loc.getX() + offset[0], loc.getY() + offset[1], loc.getZ() + offset[2]};
-                    def.friction = Args.num(scriptEntry.getObjectTag("friction"), 0.5);
-                    def.restitution = Args.num(scriptEntry.getObjectTag("restitution"), 0.0);
-                    def.group = (int) Args.num(scriptEntry.getObjectTag("group"), 0);
-                    def.sensor = Args.bool(scriptEntry.getObjectTag("sensor"), false);
-                    def.notify = Args.bool(scriptEntry.getObjectTag("notify"), true);
-                    def.detectStatic = Args.bool(scriptEntry.getObjectTag("detect_static"), false);
-                    def.notifyPersist = Args.bool(scriptEntry.getObjectTag("notify_persist"), false);
+                    def.friction = Args.num(frictionArg, 0.5);
+                    def.restitution = Args.num(restitutionArg, 0.0);
+                    def.group = (int) Args.num(groupArg, 0);
+                    def.sensor = Args.bool(sensorArg, false);
+                    def.notify = Args.bool(notifyArg, true);
+                    def.detectStatic = Args.bool(detectStaticArg, false);
+                    def.notifyPersist = Args.bool(notifyPersistArg, false);
                     def.managed = true;
                     def.allowSleeping = false;
                     def.removeOnFallOut = false;
-                    def.tag = Args.str(scriptEntry.getObjectTag("tag"), "");
+                    def.tag = Args.str(tagArg, "");
 
                     manager.detach(player.getUniqueId(), worldId, name);
                     world.createBody(def);
-                    manager.register(player.getUniqueId(), worldId, name, offset, follow, Args.num(scriptEntry.getObjectTag("push"), 0));
+                    manager.register(player.getUniqueId(), worldId, name, offset, follow, Args.num(pushArg, 0));
                     break;
                 }
-                case "detach": {
+                case DETACH: {
                     UUID uuid = subject.getUniqueId();
                     manager.detach(uuid, worldId, name);
                     break;
@@ -165,19 +171,20 @@ public class PhysHitboxCommand extends AbstractCommand {
         }
     }
 
-    private static Entity resolveSubject(ScriptEntry scriptEntry) {
-        if (scriptEntry.hasObject("entity")) {
-            ObjectTag tag = scriptEntry.getObjectTag("entity");
+
+    private static Entity resolveSubject(ScriptEntry scriptEntry, ObjectTag entityArg, ObjectTag playerArg) {
+        if (entityArg != null) {
+            ObjectTag tag = entityArg;
             EntityTag et = tag instanceof EntityTag ? (EntityTag) tag : EntityTag.valueOf(tag.toString(), scriptEntry.context);
             return et == null ? null : et.getBukkitEntity();
         }
-        PlayerTag playerTag = resolvePlayer(scriptEntry);
+        PlayerTag playerTag = resolvePlayer(scriptEntry, playerArg);
         return playerTag == null ? null : playerTag.getPlayerEntity();
     }
 
-    private static PlayerTag resolvePlayer(ScriptEntry scriptEntry) {
-        if (scriptEntry.hasObject("player")) {
-            ObjectTag tag = scriptEntry.getObjectTag("player");
+    private static PlayerTag resolvePlayer(ScriptEntry scriptEntry, ObjectTag playerArg) {
+        if (playerArg != null) {
+            ObjectTag tag = playerArg;
             if (tag instanceof PlayerTag) {
                 return (PlayerTag) tag;
             }

@@ -13,26 +13,26 @@ final class BindingArgs {
     private BindingArgs() {
     }
 
-    static DisplayBinder.Binding create(EntityTag entity, ScriptEntry scriptEntry) {
+    static DisplayBinder.Binding create(EntityTag entity, ScriptEntry scriptEntry, ObjectTag offsetArg, ObjectTag scaleArg, ObjectTag rotationOffsetArg, ObjectTag interpolationDurationArg, ObjectTag interpolationArg, ObjectTag teleportDurationArg, ObjectTag removeWithBodyArg) {
         DisplayBinder.Binding binding = new DisplayBinder.Binding(entity.getBukkitEntity());
-        if (scriptEntry.hasObject("offset")) {
-            double[] o = Args.vec(scriptEntry.getObjectTag("offset"), scriptEntry.context);
+        if (offsetArg != null) {
+            double[] o = Args.vec(offsetArg, scriptEntry.context);
             binding.offset = new Vector3f((float) o[0], (float) o[1], (float) o[2]);
         }
-        if (scriptEntry.hasObject("scale")) {
-            double[] s = Args.vec(scriptEntry.getObjectTag("scale"), scriptEntry.context);
+        if (scaleArg != null) {
+            double[] s = Args.vec(scaleArg, scriptEntry.context);
             binding.scale = new Vector3f((float) s[0], (float) s[1], (float) s[2]);
         }
-        if (scriptEntry.hasObject("rotation_offset")) {
-            double[] q = Args.rotation(scriptEntry.getObjectTag("rotation_offset"), scriptEntry.context);
+        if (rotationOffsetArg != null) {
+            double[] q = Args.rotation(rotationOffsetArg, scriptEntry.context);
             binding.rotationOffset = new Quaternionf((float) q[0], (float) q[1], (float) q[2], (float) q[3]);
         }
-        ObjectTag interp = scriptEntry.hasObject("interpolation_duration")
-                ? scriptEntry.getObjectTag("interpolation_duration")
-                : scriptEntry.getObjectTag("interpolation");
+        ObjectTag interp = (interpolationDurationArg != null)
+                ? interpolationDurationArg
+                : interpolationArg;
         binding.interpolationDuration = (int) Args.num(interp, 3);
-        binding.teleportDuration = (int) Args.num(scriptEntry.getObjectTag("teleport_duration"), 3);
-        binding.removeWithBody = Args.bool(scriptEntry.getObjectTag("remove_with_body"), true);
+        binding.teleportDuration = (int) Args.num(teleportDurationArg, 3);
+        binding.removeWithBody = Args.bool(removeWithBodyArg, true);
         return binding;
     }
 }

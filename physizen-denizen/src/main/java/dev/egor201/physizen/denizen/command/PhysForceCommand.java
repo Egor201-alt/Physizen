@@ -3,8 +3,11 @@ package dev.egor201.physizen.denizen.command;
 import dev.egor201.physizen.denizen.args.Args;
 import dev.egor201.physizen.denizen.args.ShapeParser;
 
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
+import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
@@ -28,47 +31,37 @@ public class PhysForceCommand extends AbstractCommand {
         setSyntax("physforce [force/impulse/torque/angular_impulse/velocity/angular_velocity/point_force/point_impulse] (world:<world>) body:<name> vector:<vector> (point:<location>)");
         setRequiredArguments(2, 8);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("body", "name");
+        addRemappedPrefixes("vector", "v", "vec");
+        addRemappedPrefixes("point", "at");
     }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action")) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("body") && (arg.matchesPrefix("body", "name") || !arg.hasPrefix())) {
-                scriptEntry.addObject("body", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
-                scriptEntry.addObject("world", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("vector") && arg.matchesPrefix("vector", "v", "vec")) {
-                scriptEntry.addObject("vector", arg.object);
-            }
-            else if (!scriptEntry.hasObject("point") && arg.matchesPrefix("point", "at")) {
-                scriptEntry.addObject("point", arg.object);
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+    public enum Action {
+        FORCE, IMPULSE, TORQUE, ANGULAR_IMPULSE, VELOCITY, ANGULAR_VELOCITY, POINT_FORCE, POINT_IMPULSE
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
-        ElementTag bodyName = scriptEntry.getElement("body");
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("body_linear") @ArgLinear @ArgDefaultNull ElementTag bodyLinear,
+            @ArgName("body") @ArgPrefixed @ArgDefaultNull ElementTag bodyArg,
+            @ArgName("world") @ArgPrefixed @ArgDefaultNull ElementTag worldArg,
+            @ArgName("vector") @ArgPrefixed @ArgDefaultNull ObjectTag vectorArg,
+            @ArgName("point") @ArgPrefixed @ArgDefaultNull ObjectTag pointArg) {
+        ElementTag bodyValue = bodyArg != null ? bodyArg : bodyLinear;
+        ElementTag action = actionArg;
+        ElementTag bodyName = bodyValue;
         if (action == null || bodyName == null) {
             Debug.echoError(scriptEntry, "physforce needs action and body:<name>.");
             return;
         }
-        if (!scriptEntry.hasObject("vector")) {
+        if (!(vectorArg != null)) {
             Debug.echoError(scriptEntry, "physforce needs vector:<vector>.");
             return;
         }
 
-        String act = action.asString().toLowerCase();
-        String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : "default";
+        String act = action.name().toLowerCase();
+        String worldId = (worldArg != null) ? worldArg.asString() : "default";
 
         try {
             PhysWorld w = Args.world(worldId);
@@ -78,42 +71,42 @@ public class PhysForceCommand extends AbstractCommand {
                 return;
             }
 
-            double[] v = Args.vec(scriptEntry.getObjectTag("vector"), scriptEntry.context);
+            double[] v = Args.vec(vectorArg, scriptEntry.context);
 
-            switch (act) {
-                case "force":
+            switch (action) {
+                case FORCE:
                     b.addForce(v);
                     break;
-                case "impulse":
+                case IMPULSE:
                     b.addImpulse(v);
                     break;
-                case "torque":
+                case TORQUE:
                     b.addTorque(v);
                     break;
-                case "angular_impulse":
+                case ANGULAR_IMPULSE:
                     b.addAngularImpulse(v);
                     break;
-                case "velocity":
+                case VELOCITY:
                     b.setLinearVelocity(v);
                     break;
-                case "angular_velocity":
+                case ANGULAR_VELOCITY:
                     b.setAngularVelocity(v);
                     break;
-                case "point_force": {
-                    if (!scriptEntry.hasObject("point")) {
+                case POINT_FORCE: {
+                    if (!(pointArg != null)) {
                         Debug.echoError(scriptEntry, "point_force requires point:<location>.");
                         return;
                     }
-                    double[] pt = Args.vec(scriptEntry.getObjectTag("point"), scriptEntry.context);
+                    double[] pt = Args.vec(pointArg, scriptEntry.context);
                     b.addForceAt(v, pt);
                     break;
                 }
-                case "point_impulse": {
-                    if (!scriptEntry.hasObject("point")) {
+                case POINT_IMPULSE: {
+                    if (!(pointArg != null)) {
                         Debug.echoError(scriptEntry, "point_impulse requires point:<location>.");
                         return;
                     }
-                    double[] pt = Args.vec(scriptEntry.getObjectTag("point"), scriptEntry.context);
+                    double[] pt = Args.vec(pointArg, scriptEntry.context);
                     b.addImpulseAt(v, pt);
                     break;
                 }
@@ -126,4 +119,5 @@ public class PhysForceCommand extends AbstractCommand {
             Debug.echoError(scriptEntry, e.getMessage());
         }
     }
+
 }

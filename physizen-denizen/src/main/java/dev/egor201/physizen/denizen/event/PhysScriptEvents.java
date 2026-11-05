@@ -37,11 +37,6 @@ public final class PhysScriptEvents {
         public ElementTag owner;
 
         @Override
-        public boolean matches(ScriptPath path) {
-            return super.matches(path);
-        }
-
-        @Override
         public ObjectTag getContext(String name) {
             switch (name) {
                 case "body":

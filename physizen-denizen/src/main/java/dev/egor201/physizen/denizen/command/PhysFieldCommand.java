@@ -3,8 +3,11 @@ package dev.egor201.physizen.denizen.command;
 import dev.egor201.physizen.denizen.args.Args;
 import dev.egor201.physizen.denizen.args.ShapeParser;
 
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
+import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
@@ -28,61 +31,60 @@ public class PhysFieldCommand extends AbstractCommand {
         setSyntax("physfield [create/remove] (world:<world>) name:<name> (type:<type>) (center:<loc>) (radius:<r>) (strength:<s>) ...");
         setRequiredArguments(2, 16);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("name", "id");
     }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action")) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("name") && arg.matchesPrefix("name", "id")) {
-                scriptEntry.addObject("name", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
-                scriptEntry.addObject("world", arg.asElement());
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+    public enum Action {
+        REMOVE, CREATE
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
-        ElementTag nameTag = scriptEntry.getElement("name");
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("name") @ArgPrefixed @ArgDefaultNull ElementTag nameArg,
+            @ArgName("world") @ArgPrefixed @ArgDefaultNull ElementTag worldArg,
+            @ArgName("type") @ArgPrefixed @ArgDefaultNull FieldDef.Kind typeArg,
+            @ArgName("center") @ArgPrefixed @ArgDefaultNull ObjectTag centerArg,
+            @ArgName("direction") @ArgPrefixed @ArgDefaultNull ObjectTag directionArg,
+            @ArgName("radius") @ArgPrefixed @ArgDefaultNull ObjectTag radiusArg,
+            @ArgName("strength") @ArgPrefixed @ArgDefaultNull ObjectTag strengthArg,
+            @ArgName("surface_y") @ArgPrefixed @ArgDefaultNull ObjectTag surfaceYArg,
+            @ArgName("density") @ArgPrefixed @ArgDefaultNull ObjectTag densityArg,
+            @ArgName("drag") @ArgPrefixed @ArgDefaultNull ObjectTag dragArg,
+            @ArgName("mass_independent") @ArgPrefixed @ArgDefaultNull ObjectTag massIndependentArg,
+            @ArgName("group") @ArgPrefixed @ArgDefaultNull ObjectTag groupArg) {
+        ElementTag action = actionArg;
+        ElementTag nameTag = nameArg;
         if (action == null || nameTag == null) {
             Debug.echoError(scriptEntry, "physfield needs action and name:<name>.");
             return;
         }
 
-        String act = action.asString().toLowerCase();
-        String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : "default";
+        String worldId = (worldArg != null) ? worldArg.asString() : "default";
 
         try {
             PhysWorld w = Args.world(worldId);
 
-            if (act.equals("remove")) {
+            if (action == Action.REMOVE) {
                 w.removeField(nameTag.asString());
                 return;
             }
 
-            if (act.equals("create")) {
+            if (action == Action.CREATE) {
                 FieldDef def = new FieldDef();
                 def.name = nameTag.asString();
-                if (scriptEntry.hasObject("type")) {
-                    def.kind = FieldDef.Kind.valueOf(scriptEntry.getElement("type").asString().toUpperCase());
+                if (typeArg != null) {
+                    def.kind = typeArg;
                 }
-                if (scriptEntry.hasObject("center")) def.center = Args.vec(scriptEntry.getObjectTag("center"), scriptEntry.context);
-                if (scriptEntry.hasObject("direction")) def.direction = Args.vec(scriptEntry.getObjectTag("direction"), scriptEntry.context);
-                def.radius = Args.num(scriptEntry.getObjectTag("radius"), 10.0);
-                def.strength = Args.num(scriptEntry.getObjectTag("strength"), 1.0);
-                def.surfaceY = Args.num(scriptEntry.getObjectTag("surface_y"), 0.0);
-                def.density = Args.num(scriptEntry.getObjectTag("density"), 1000.0);
-                def.drag = Args.num(scriptEntry.getObjectTag("drag"), 0.5);
-                def.massIndependent = Args.bool(scriptEntry.getObjectTag("mass_independent"), true);
-                def.group = (int) Args.num(scriptEntry.getObjectTag("group"), -1);
+                if (centerArg != null) def.center = Args.vec(centerArg, scriptEntry.context);
+                if (directionArg != null) def.direction = Args.vec(directionArg, scriptEntry.context);
+                def.radius = Args.num(radiusArg, 10.0);
+                def.strength = Args.num(strengthArg, 1.0);
+                def.surfaceY = Args.num(surfaceYArg, 0.0);
+                def.density = Args.num(densityArg, 1000.0);
+                def.drag = Args.num(dragArg, 0.5);
+                def.massIndependent = Args.bool(massIndependentArg, true);
+                def.group = (int) Args.num(groupArg, -1);
 
                 w.addField(def);
             }
@@ -91,4 +93,5 @@ public class PhysFieldCommand extends AbstractCommand {
             Debug.echoError(scriptEntry, e.getMessage());
         }
     }
+
 }

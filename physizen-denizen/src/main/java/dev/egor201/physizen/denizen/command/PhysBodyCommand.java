@@ -4,9 +4,11 @@ import dev.egor201.physizen.denizen.args.Args;
 import dev.egor201.physizen.denizen.args.ShapeParser;
 
 import com.denizenscript.denizen.objects.EntityTag;
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
@@ -44,38 +46,72 @@ public class PhysBodyCommand extends AbstractCommand {
         setSyntax("physbody [create/remove/teleport/move/set/bind/unbind/activate/deactivate/save/load] (world:<world>) (name:<name>) ...");
         setRequiredArguments(1, 24);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("name", "body");
     }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action")) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("name") && (arg.matchesPrefix("name", "body") || !arg.hasPrefix())) {
-                scriptEntry.addObject("name", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
-                scriptEntry.addObject("world", arg.asElement());
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+    public enum Action {
+        CREATE, REMOVE, TELEPORT, MOVE, ACTIVATE, DEACTIVATE, SET, BIND, UNBIND, SAVE, LOAD, PASTE, SPAWN
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("name_linear") @ArgLinear @ArgDefaultNull ElementTag nameLinear,
+            @ArgName("name") @ArgPrefixed @ArgDefaultNull ElementTag nameArg,
+            @ArgName("world") @ArgPrefixed @ArgDefaultNull ElementTag worldArg,
+            @ArgName("shape") @ArgPrefixed @ArgDefaultNull ObjectTag shapeArg,
+            @ArgName("at") @ArgPrefixed @ArgDefaultNull ObjectTag atArg,
+            @ArgName("position") @ArgPrefixed @ArgDefaultNull ObjectTag positionArg,
+            @ArgName("rotation") @ArgPrefixed @ArgDefaultNull ObjectTag rotationArg,
+            @ArgName("euler") @ArgPrefixed @ArgDefaultNull ObjectTag eulerArg,
+            @ArgName("type") @ArgPrefixed @ArgDefaultNull MotionKind typeArg,
+            @ArgName("mass") @ArgPrefixed @ArgDefaultNull ObjectTag massArg,
+            @ArgName("friction") @ArgPrefixed @ArgDefaultNull ObjectTag frictionArg,
+            @ArgName("restitution") @ArgPrefixed @ArgDefaultNull ObjectTag restitutionArg,
+            @ArgName("linear_damping") @ArgPrefixed @ArgDefaultNull ObjectTag linearDampingArg,
+            @ArgName("angular_damping") @ArgPrefixed @ArgDefaultNull ObjectTag angularDampingArg,
+            @ArgName("gravity") @ArgPrefixed @ArgDefaultNull ObjectTag gravityArg,
+            @ArgName("group") @ArgPrefixed @ArgDefaultNull ObjectTag groupArg,
+            @ArgName("sensor") @ArgPrefixed @ArgDefaultNull ObjectTag sensorArg,
+            @ArgName("detect_static") @ArgPrefixed @ArgDefaultNull ObjectTag detectStaticArg,
+            @ArgName("notify_persist") @ArgPrefixed @ArgDefaultNull ObjectTag notifyPersistArg,
+            @ArgName("continuous") @ArgPrefixed @ArgDefaultNull ObjectTag continuousArg,
+            @ArgName("allow_sleeping") @ArgPrefixed @ArgDefaultNull ObjectTag allowSleepingArg,
+            @ArgName("notify") @ArgPrefixed @ArgDefaultNull ObjectTag notifyArg,
+            @ArgName("remove_on_fall") @ArgPrefixed @ArgDefaultNull ObjectTag removeOnFallArg,
+            @ArgName("tag") @ArgPrefixed @ArgDefaultNull ObjectTag tagArg,
+            @ArgName("max_velocity") @ArgPrefixed @ArgDefaultNull ObjectTag maxVelocityArg,
+            @ArgName("max_angular_velocity") @ArgPrefixed @ArgDefaultNull ObjectTag maxAngularVelocityArg,
+            @ArgName("velocity") @ArgPrefixed @ArgDefaultNull ObjectTag velocityArg,
+            @ArgName("angular_velocity") @ArgPrefixed @ArgDefaultNull ObjectTag angularVelocityArg,
+            @ArgName("to") @ArgPrefixed @ArgDefaultNull ObjectTag toArg,
+            @ArgName("seconds") @ArgPrefixed @ArgDefaultNull ObjectTag secondsArg,
+            @ArgName("scale") @ArgPrefixed @ArgDefaultNull ObjectTag scaleArg,
+            @ArgName("scale_displays") @ArgPrefixed @ArgDefaultNull ObjectTag scaleDisplaysArg,
+            @ArgName("display_scale") @ArgPrefixed @ArgDefaultNull ObjectTag displayScaleArg,
+            @ArgName("damping") @ArgPrefixed @ArgDefaultNull ObjectTag dampingArg,
+            @ArgName("entities") @ArgPrefixed @ArgDefaultNull ObjectTag entitiesArg,
+            @ArgName("offset") @ArgPrefixed @ArgDefaultNull ObjectTag offsetArg,
+            @ArgName("interpolation_duration") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationDurationArg,
+            @ArgName("interpolation") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationArg,
+            @ArgName("teleport_duration") @ArgPrefixed @ArgDefaultNull ObjectTag teleportDurationArg,
+            @ArgName("interpolation_start") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationStartArg,
+            @ArgName("interpolation_delay") @ArgPrefixed @ArgDefaultNull ObjectTag interpolationDelayArg,
+            @ArgName("remove_with_body") @ArgPrefixed @ArgDefaultNull ObjectTag removeWithBodyArg,
+            @ArgName("file") @ArgPrefixed @ArgDefaultNull ElementTag fileArg,
+            @ArgName("bodies") @ArgPrefixed @ArgDefaultNull ObjectTag bodiesArg,
+            @ArgName("prefix") @ArgPrefixed @ArgDefaultNull ElementTag prefixArg) {
+        ElementTag nameValue = nameArg != null ? nameArg : nameLinear;
+        ElementTag action = actionArg;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physbody command.");
             return;
         }
-        String act = action.asString().toLowerCase();
-        String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : "default";
-        String name = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
+        String act = action.name().toLowerCase();
+        String worldId = (worldArg != null) ? worldArg.asString() : "default";
+        String name = (nameValue != null) ? nameValue.asString() : null;
 
-        if (name == null && !act.equals("load") && !act.equals("paste") && !act.equals("spawn") && !act.equals("save")) {
+        if (name == null && !action == Action.LOAD && !action == Action.PASTE && !action == Action.SPAWN && !action == Action.SAVE) {
             Debug.echoError(scriptEntry, "physbody " + act + " needs name:<id>.");
             return;
         }
@@ -83,107 +119,99 @@ public class PhysBodyCommand extends AbstractCommand {
         try {
             PhysWorld w = Args.world(worldId);
 
-            switch (act) {
-                case "create": {
+            switch (action) {
+                case CREATE: {
                     if (name == null) {
                         Debug.echoError(scriptEntry, "physbody create needs name:<id>.");
                         return;
                     }
                     BodyDef def = new BodyDef();
                     def.name = name;
-                    ObjectTag shapeObj = scriptEntry.getObjectTag("shape");
+                    ObjectTag shapeObj = shapeArg;
                     def.shape = ShapeParser.shape((ObjectTag) shapeObj, scriptEntry.context);
-                    if (scriptEntry.hasObject("at") || scriptEntry.hasObject("position")) {
-                        def.position = Args.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context);
+                    if ((atArg != null) || (positionArg != null)) {
+                        def.position = Args.vec((atArg != null ? atArg : positionArg), scriptEntry.context);
                     }
-                    if (scriptEntry.hasObject("rotation")) {
-                        def.rotation = Args.rotation(scriptEntry.getObjectTag("rotation"), scriptEntry.context);
+                    if (rotationArg != null) {
+                        def.rotation = Args.rotation(rotationArg, scriptEntry.context);
                     }
-                    else if (scriptEntry.hasObject("euler")) {
-                        def.rotation = Args.euler(Args.vec(scriptEntry.getObjectTag("euler"), scriptEntry.context));
+                    else if (eulerArg != null) {
+                        def.rotation = Args.euler(Args.vec(eulerArg, scriptEntry.context));
                     }
-                    if (scriptEntry.hasObject("type")) {
-                        def.type = MotionKind.valueOf(scriptEntry.getElement("type").asString().toUpperCase());
+                    if (typeArg != null) {
+                        def.type = typeArg;
                     }
-                    def.mass = Args.num(scriptEntry.getObjectTag("mass"), 0);
-                    def.friction = Args.num(scriptEntry.getObjectTag("friction"), 0.5);
-                    def.restitution = Args.num(scriptEntry.getObjectTag("restitution"), 0.0);
-                    def.linearDamping = Args.num(scriptEntry.getObjectTag("linear_damping"), 0.05);
-                    def.angularDamping = Args.num(scriptEntry.getObjectTag("angular_damping"), 0.05);
-                    def.gravityFactor = Args.num(scriptEntry.getObjectTag("gravity"), 1.0);
-                    def.group = (int) Args.num(scriptEntry.getObjectTag("group"), 0);
-                    def.sensor = Args.bool(scriptEntry.getObjectTag("sensor"), false);
-                    def.detectStatic = Args.bool(scriptEntry.getObjectTag("detect_static"), false);
-                    def.notifyPersist = Args.bool(scriptEntry.getObjectTag("notify_persist"), false);
-                    def.continuous = Args.bool(scriptEntry.getObjectTag("continuous"), false);
-                    def.allowSleeping = Args.bool(scriptEntry.getObjectTag("allow_sleeping"), true);
-                    def.notify = Args.bool(scriptEntry.getObjectTag("notify"), true);
-                    def.removeOnFallOut = Args.bool(scriptEntry.getObjectTag("remove_on_fall"), true);
-                    def.tag = Args.str(scriptEntry.getObjectTag("tag"), "");
-                    def.maxLinearVelocity = Args.num(scriptEntry.getObjectTag("max_velocity"), 500);
-                    def.maxAngularVelocity = Args.num(scriptEntry.getObjectTag("max_angular_velocity"), 47.1238898);
+                    def.mass = Args.num(massArg, 0);
+                    def.friction = Args.num(frictionArg, 0.5);
+                    def.restitution = Args.num(restitutionArg, 0.0);
+                    def.linearDamping = Args.num(linearDampingArg, 0.05);
+                    def.angularDamping = Args.num(angularDampingArg, 0.05);
+                    def.gravityFactor = Args.num(gravityArg, 1.0);
+                    def.group = (int) Args.num(groupArg, 0);
+                    def.sensor = Args.bool(sensorArg, false);
+                    def.detectStatic = Args.bool(detectStaticArg, false);
+                    def.notifyPersist = Args.bool(notifyPersistArg, false);
+                    def.continuous = Args.bool(continuousArg, false);
+                    def.allowSleeping = Args.bool(allowSleepingArg, true);
+                    def.notify = Args.bool(notifyArg, true);
+                    def.removeOnFallOut = Args.bool(removeOnFallArg, true);
+                    def.tag = Args.str(tagArg, "");
+                    def.maxLinearVelocity = Args.num(maxVelocityArg, 500);
+                    def.maxAngularVelocity = Args.num(maxAngularVelocityArg, 47.1238898);
 
-                    if (scriptEntry.hasObject("velocity")) {
-                        def.linearVelocity = Args.vec(scriptEntry.getObjectTag("velocity"), scriptEntry.context);
+                    if (velocityArg != null) {
+                        def.linearVelocity = Args.vec(velocityArg, scriptEntry.context);
                     }
-                    if (scriptEntry.hasObject("angular_velocity")) {
-                        def.angularVelocity = Args.vec(scriptEntry.getObjectTag("angular_velocity"), scriptEntry.context);
+                    if (angularVelocityArg != null) {
+                        def.angularVelocity = Args.vec(angularVelocityArg, scriptEntry.context);
                     }
 
                     w.createBody(def);
                     break;
                 }
-                case "remove": {
+                case REMOVE: {
                     if (name == null) return;
                     w.removeBody(name);
                     PhysizenServices.get().displays.unbindAll(worldId, name);
                     break;
                 }
-                case "teleport": {
+                case TELEPORT: {
                     PhysBody b = w.body(name);
                     if (b == null) return;
-                    double[] pos = Args.vec(scriptEntry.getObjectTag("to"), scriptEntry.context);
-                    double[] rot = readRotation(scriptEntry);
+                    double[] pos = Args.vec(toArg, scriptEntry.context);
+                    double[] rot = readRotation(scriptEntry, rotationArg, eulerArg);
                     b.teleport(pos, rot);
                     break;
                 }
-                case "move": {
+                case MOVE: {
                     PhysBody b = w.body(name);
                     if (b == null) return;
-                    double[] pos = Args.vec(scriptEntry.getObjectTag("to"), scriptEntry.context);
-                    double[] rot = readRotation(scriptEntry);
-                    double seconds = Args.num(scriptEntry.getObjectTag("seconds"), 1.0 / 20.0);
+                    double[] pos = Args.vec(toArg, scriptEntry.context);
+                    double[] rot = readRotation(scriptEntry, rotationArg, eulerArg);
+                    double seconds = Args.num(secondsArg, 1.0 / 20.0);
                     b.moveKinematic(pos, rot, seconds);
                     break;
                 }
-                case "activate": {
+                case ACTIVATE: {
                     PhysBody b = w.body(name);
                     if (b != null) b.activate();
                     break;
                 }
-                case "deactivate": {
+                case DEACTIVATE: {
                     PhysBody b = w.body(name);
                     if (b != null) b.deactivate();
                     break;
                 }
-                case "set": {
+                case SET: {
                     PhysBody b = w.body(name);
                     if (b == null) return;
                     if (b.def.internal) {
                         throw new PhysException("Terrain bodies cannot be modified.");
                     }
-                    MotionKind newType = null;
-                    if (scriptEntry.hasObject("type")) {
-                        try {
-                            newType = MotionKind.valueOf(scriptEntry.getElement("type").asString().toUpperCase());
-                        }
-                        catch (IllegalArgumentException e) {
-                            throw new PhysException("Unknown body type '" + scriptEntry.getElement("type").asString() + "', expected static, kinematic or dynamic.");
-                        }
-                    }
+                    MotionKind newType = typeArg;
                     ShapeSpec newShape = null;
-                    if (scriptEntry.hasObject("shape")) {
-                        newShape = ShapeParser.shape(scriptEntry.getObjectTag("shape"), scriptEntry.context);
+                    if (shapeArg != null) {
+                        newShape = ShapeParser.shape(shapeArg, scriptEntry.context);
                     }
                     MotionKind targetType = newType != null ? newType : b.def.type;
                     ShapeSpec targetShape = newShape != null ? newShape : b.def.shape;
@@ -191,16 +219,16 @@ public class PhysBodyCommand extends AbstractCommand {
                         throw new PhysException("Mesh shapes can only be used by static or kinematic bodies.");
                     }
                     double scaleFactor = 1.0;
-                    boolean hasScale = scriptEntry.hasObject("scale");
+                    boolean hasScale = (scaleArg != null);
                     if (hasScale) {
-                        scaleFactor = Args.num(scriptEntry.getObjectTag("scale"), 1.0);
+                        scaleFactor = Args.num(scaleArg, 1.0);
                         if (!(scaleFactor > 0)) {
                             throw new PhysException("Scale must be positive.");
                         }
                     }
                     int newGroup = -1;
-                    if (scriptEntry.hasObject("group")) {
-                        newGroup = (int) Args.num(scriptEntry.getObjectTag("group"), 0);
+                    if (groupArg != null) {
+                        newGroup = (int) Args.num(groupArg, 0);
                         if (newGroup < 0 || newGroup >= PhysWorld.GROUPS) {
                             throw new PhysException("Group must be between 0 and " + (PhysWorld.GROUPS - 1) + ".");
                         }
@@ -213,112 +241,112 @@ public class PhysBodyCommand extends AbstractCommand {
                     }
                     if (hasScale) {
                         b.scale(scaleFactor);
-                        if (Args.bool(scriptEntry.getObjectTag("scale_displays"), true)) {
+                        if (Args.bool(scaleDisplaysArg, true)) {
                             PhysizenServices.get().displays.rescale(worldId, name, scaleFactor);
                         }
                     }
                     if (newType == MotionKind.DYNAMIC) {
                         b.setType(newType);
                     }
-                    if (scriptEntry.hasObject("mass")) {
-                        b.setMass(Args.num(scriptEntry.getObjectTag("mass"), 0));
+                    if (massArg != null) {
+                        b.setMass(Args.num(massArg, 0));
                     }
                     if (newGroup >= 0) {
                         b.setGroup(newGroup);
                     }
-                    if (scriptEntry.hasObject("sensor")) {
-                        b.setSensor(Args.bool(scriptEntry.getObjectTag("sensor"), false));
+                    if (sensorArg != null) {
+                        b.setSensor(Args.bool(sensorArg, false));
                     }
-                    if (scriptEntry.hasObject("continuous")) {
-                        b.setContinuous(Args.bool(scriptEntry.getObjectTag("continuous"), false));
+                    if (continuousArg != null) {
+                        b.setContinuous(Args.bool(continuousArg, false));
                     }
-                    if (scriptEntry.hasObject("allow_sleeping")) {
-                        b.setAllowSleeping(Args.bool(scriptEntry.getObjectTag("allow_sleeping"), true));
+                    if (allowSleepingArg != null) {
+                        b.setAllowSleeping(Args.bool(allowSleepingArg, true));
                     }
-                    if (scriptEntry.hasObject("max_velocity")) {
-                        b.setMaxVelocities(Args.num(scriptEntry.getObjectTag("max_velocity"), 500), null);
+                    if (maxVelocityArg != null) {
+                        b.setMaxVelocities(Args.num(maxVelocityArg, 500), null);
                     }
-                    if (scriptEntry.hasObject("max_angular_velocity")) {
-                        b.setMaxVelocities(null, Args.num(scriptEntry.getObjectTag("max_angular_velocity"), 47.1238898));
+                    if (maxAngularVelocityArg != null) {
+                        b.setMaxVelocities(null, Args.num(maxAngularVelocityArg, 47.1238898));
                     }
-                    if (scriptEntry.hasObject("notify")) {
-                        b.setNotify(Args.bool(scriptEntry.getObjectTag("notify"), true));
+                    if (notifyArg != null) {
+                        b.setNotify(Args.bool(notifyArg, true));
                     }
-                    if (scriptEntry.hasObject("notify_persist")) {
-                        b.setNotifyPersist(Args.bool(scriptEntry.getObjectTag("notify_persist"), false));
+                    if (notifyPersistArg != null) {
+                        b.setNotifyPersist(Args.bool(notifyPersistArg, false));
                     }
-                    if (scriptEntry.hasObject("remove_on_fall")) {
-                        b.setRemoveOnFallOut(Args.bool(scriptEntry.getObjectTag("remove_on_fall"), true));
+                    if (removeOnFallArg != null) {
+                        b.setRemoveOnFallOut(Args.bool(removeOnFallArg, true));
                     }
-                    if (scriptEntry.hasObject("display_scale")) {
-                        double[] ds = Args.vec(scriptEntry.getObjectTag("display_scale"), scriptEntry.context);
+                    if (displayScaleArg != null) {
+                        double[] ds = Args.vec(displayScaleArg, scriptEntry.context);
                         PhysizenServices.get().displays.setScale(worldId, name, new Vector3f((float) ds[0], (float) ds[1], (float) ds[2]));
                     }
-                    if (scriptEntry.hasObject("friction")) b.setFriction(Args.num(scriptEntry.getObjectTag("friction"), 0.5));
-                    if (scriptEntry.hasObject("restitution")) b.setRestitution(Args.num(scriptEntry.getObjectTag("restitution"), 0));
-                    if (scriptEntry.hasObject("gravity")) b.setGravityFactor(Args.num(scriptEntry.getObjectTag("gravity"), 1));
-                    if (scriptEntry.hasObject("damping")) {
-                        double[] d = Args.pair(scriptEntry.getObjectTag("damping"));
+                    if (frictionArg != null) b.setFriction(Args.num(frictionArg, 0.5));
+                    if (restitutionArg != null) b.setRestitution(Args.num(restitutionArg, 0));
+                    if (gravityArg != null) b.setGravityFactor(Args.num(gravityArg, 1));
+                    if (dampingArg != null) {
+                        double[] d = Args.pair(dampingArg);
                         b.setDamping(d[0], d[1]);
                     }
-                    if (scriptEntry.hasObject("linear_damping")) {
-                        b.setDamping(Args.num(scriptEntry.getObjectTag("linear_damping"), 0.05), null);
+                    if (linearDampingArg != null) {
+                        b.setDamping(Args.num(linearDampingArg, 0.05), null);
                     }
-                    if (scriptEntry.hasObject("angular_damping")) {
-                        b.setDamping(null, Args.num(scriptEntry.getObjectTag("angular_damping"), 0.05));
+                    if (angularDampingArg != null) {
+                        b.setDamping(null, Args.num(angularDampingArg, 0.05));
                     }
-                    if (scriptEntry.hasObject("tag")) {
-                        b.tag = Args.str(scriptEntry.getObjectTag("tag"), "");
+                    if (tagArg != null) {
+                        b.tag = Args.str(tagArg, "");
                     }
                     break;
                 }
-                case "bind": {
-                    List<EntityTag> ents = Args.entities(scriptEntry.getObjectTag("entities"), scriptEntry.context);
+                case BIND: {
+                    List<EntityTag> ents = Args.entities(entitiesArg, scriptEntry.context);
                     for (EntityTag et : ents) {
                         DisplayBinder.Binding binding = new DisplayBinder.Binding(et.getBukkitEntity());
-                        if (scriptEntry.hasObject("offset")) {
-                            double[] o = Args.vec(scriptEntry.getObjectTag("offset"), scriptEntry.context);
+                        if (offsetArg != null) {
+                            double[] o = Args.vec(offsetArg, scriptEntry.context);
                             binding.offset = new Vector3f((float) o[0], (float) o[1], (float) o[2]);
                         }
-                        if (scriptEntry.hasObject("scale")) {
-                            double[] s = Args.vec(scriptEntry.getObjectTag("scale"), scriptEntry.context);
+                        if (scaleArg != null) {
+                            double[] s = Args.vec(scaleArg, scriptEntry.context);
                             binding.scale = new Vector3f((float) s[0], (float) s[1], (float) s[2]);
                         }
 
-                        ObjectTag interp = scriptEntry.hasObject("interpolation_duration") 
-                                ? scriptEntry.getObjectTag("interpolation_duration") 
-                                : scriptEntry.getObjectTag("interpolation");
+                        ObjectTag interp = (interpolationDurationArg != null) 
+                                ? interpolationDurationArg 
+                                : interpolationArg;
                         binding.interpolationDuration = (int) Args.num(interp, 3);
 
-                        binding.teleportDuration = (int) Args.num(scriptEntry.getObjectTag("teleport_duration"), 3);
+                        binding.teleportDuration = (int) Args.num(teleportDurationArg, 3);
 
-                        ObjectTag start = scriptEntry.hasObject("interpolation_start") 
-                                ? scriptEntry.getObjectTag("interpolation_start") 
-                                : scriptEntry.getObjectTag("interpolation_delay");
+                        ObjectTag start = (interpolationStartArg != null) 
+                                ? interpolationStartArg 
+                                : interpolationDelayArg;
                         binding.interpolationStart = (int) Args.num(start, 0);
 
-                        binding.removeWithBody = Args.bool(scriptEntry.getObjectTag("remove_with_body"), true);
+                        binding.removeWithBody = Args.bool(removeWithBodyArg, true);
                         PhysizenServices.get().displays.bind(worldId, name, binding);
                         DenizenServices.persistence().persist(et.getBukkitEntity(), worldId, name);
                     }
                     break;
                 }
-                case "unbind": {
-                    List<EntityTag> ents = Args.entities(scriptEntry.getObjectTag("entities"), scriptEntry.context);
+                case UNBIND: {
+                    List<EntityTag> ents = Args.entities(entitiesArg, scriptEntry.context);
                     for (EntityTag et : ents) {
                         PhysizenServices.get().displays.unbind(worldId, name, et.getBukkitEntity().getUniqueId());
                     }
                     break;
                 }
-                case "save": {
-                    if (!scriptEntry.hasObject("file")) {
+                case SAVE: {
+                    if (!(fileArg != null)) {
                         Debug.echoError(scriptEntry, "physbody save needs file:<name>.");
                         return;
                     }
-                    String fileName = scriptEntry.getElement("file").asString();
+                    String fileName = fileArg.asString();
                     MapTag result;
-                    if (scriptEntry.hasObject("bodies")) {
-                        ListTag bList = ((ObjectTag) scriptEntry.getObjectTag("bodies")).asType(ListTag.class, scriptEntry.context);
+                    if (bodiesArg != null) {
+                        ListTag bList = ((ObjectTag) bodiesArg).asType(ListTag.class, scriptEntry.context);
                         List<String> names = new ArrayList<>();
                         for (ObjectTag obj : bList.objectForms) {
                             names.add(obj.toString());
@@ -340,21 +368,21 @@ public class PhysBodyCommand extends AbstractCommand {
                     PrefabFiles.saveToFile(result, fileName);
                     break;
                 }
-                case "load":
-                case "paste":
-                case "spawn": {
-                    if (!scriptEntry.hasObject("file")) {
+                case LOAD:
+                case PASTE:
+                case SPAWN: {
+                    if (!(fileArg != null)) {
                         Debug.echoError(scriptEntry, "physbody load needs file:<name>.");
                         return;
                     }
-                    String fileName = scriptEntry.getElement("file").asString();
+                    String fileName = fileArg.asString();
                     MapTag root = PrefabFiles.loadFromFile(fileName);
-                    double[] targetPos = scriptEntry.hasObject("at") || scriptEntry.hasObject("position")
-                            ? Args.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context)
+                    double[] targetPos = (atArg != null) || (positionArg != null)
+                            ? Args.vec((atArg != null ? atArg : positionArg), scriptEntry.context)
                             : null;
-                    double[] targetRot = readRotation(scriptEntry);
-                    String prefix = scriptEntry.hasObject("prefix") ? scriptEntry.getElement("prefix").asString() : "";
-                    String overrideName = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
+                    double[] targetRot = readRotation(scriptEntry, rotationArg, eulerArg);
+                    String prefix = (prefixArg != null) ? prefixArg.asString() : "";
+                    String overrideName = (nameValue != null) ? nameValue.asString() : null;
 
                     SaveManager.spawnPrefab(worldId, root, targetPos, targetRot, prefix, overrideName);
                     break;
@@ -369,12 +397,13 @@ public class PhysBodyCommand extends AbstractCommand {
         }
     }
 
-    private static double[] readRotation(ScriptEntry scriptEntry) {
-        if (scriptEntry.hasObject("rotation")) {
-            return Args.rotation(scriptEntry.getObjectTag("rotation"), scriptEntry.context);
+
+    private static double[] readRotation(ScriptEntry scriptEntry, ObjectTag rotationArg, ObjectTag eulerArg) {
+        if (rotationArg != null) {
+            return Args.rotation(rotationArg, scriptEntry.context);
         }
-        if (scriptEntry.hasObject("euler")) {
-            return Args.euler(Args.vec(scriptEntry.getObjectTag("euler"), scriptEntry.context));
+        if (eulerArg != null) {
+            return Args.euler(Args.vec(eulerArg, scriptEntry.context));
         }
         return null;
     }

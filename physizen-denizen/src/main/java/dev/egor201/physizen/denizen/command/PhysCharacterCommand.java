@@ -2,9 +2,11 @@ package dev.egor201.physizen.denizen.command;
 
 import com.denizenscript.denizen.objects.PlayerTag;
 import com.denizenscript.denizen.utilities.Utilities;
-import com.denizenscript.denizencore.exceptions.InvalidArgumentsRuntimeException;
-import com.denizenscript.denizencore.objects.Argument;
 import com.denizenscript.denizencore.objects.ObjectTag;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgDefaultNull;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgLinear;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgName;
+import com.denizenscript.denizencore.scripts.commands.generator.ArgPrefixed;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.scripts.ScriptEntry;
 import com.denizenscript.denizencore.scripts.commands.AbstractCommand;
@@ -60,55 +62,67 @@ public class PhysCharacterCommand extends AbstractCommand {
         setSyntax("physcharacter [create/attach/detach/remove/move/jump/set/teleport] (world:<physworld>) (name:<name>) (player:<player>) (at:<vector>) (shape:<shape>) (velocity:<vector>) (speed:<number>) (impulse:<vector>) (mode:<driven/track>) (mass:<number>) (max_slope:<degrees>) (step_height:<number>) (walk_stairs:<true/false>) (stick_to_floor:<true/false>) (push:<true/false>) (inner_body:<true/false>) (gravity:<number>) (group:<0-15>) (notify:<true/false>) (tag:<text>)");
         setRequiredArguments(1, 24);
         isProcedural = false;
+        autoCompile();
+        addRemappedPrefixes("name", "character");
     }
 
-    @Override
-    public void parseArgs(ScriptEntry scriptEntry) throws InvalidArgumentsRuntimeException {
-        for (Argument arg : scriptEntry) {
-            if (!scriptEntry.hasObject("action")) {
-                scriptEntry.addObject("action", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("name") && (arg.matchesPrefix("name", "character") || !arg.hasPrefix())) {
-                scriptEntry.addObject("name", arg.asElement());
-            }
-            else if (!scriptEntry.hasObject("world") && arg.matchesPrefix("world")) {
-                scriptEntry.addObject("world", arg.asElement());
-            }
-            else {
-                scriptEntry.addObject(arg.prefix != null ? arg.prefix : arg.getValue(), arg.object);
-            }
-        }
+    public enum Action {
+        CREATE, ATTACH, DETACH, REMOVE, MOVE, JUMP, SET, TELEPORT
     }
 
-    @Override
-    public void execute(ScriptEntry scriptEntry) {
-        ElementTag action = scriptEntry.getElement("action");
+    public static void autoExecute(ScriptEntry scriptEntry,
+            @ArgName("action") @ArgLinear Action action,
+            @ArgName("name_linear") @ArgLinear @ArgDefaultNull ElementTag nameLinear,
+            @ArgName("name") @ArgPrefixed @ArgDefaultNull ElementTag nameArg,
+            @ArgName("world") @ArgPrefixed @ArgDefaultNull ElementTag worldArg,
+            @ArgName("at") @ArgPrefixed @ArgDefaultNull ObjectTag atArg,
+            @ArgName("position") @ArgPrefixed @ArgDefaultNull ObjectTag positionArg,
+            @ArgName("mode") @ArgPrefixed @ArgDefaultNull CharacterDef.Mode modeArg,
+            @ArgName("velocity") @ArgPrefixed @ArgDefaultNull ObjectTag velocityArg,
+            @ArgName("speed") @ArgPrefixed @ArgDefaultNull ObjectTag speedArg,
+            @ArgName("impulse") @ArgPrefixed @ArgDefaultNull ObjectTag impulseArg,
+            @ArgName("gravity") @ArgPrefixed @ArgDefaultNull ObjectTag gravityArg,
+            @ArgName("rotation") @ArgPrefixed @ArgDefaultNull ObjectTag rotationArg,
+            @ArgName("shape") @ArgPrefixed @ArgDefaultNull ObjectTag shapeArg,
+            @ArgName("mass") @ArgPrefixed @ArgDefaultNull ObjectTag massArg,
+            @ArgName("max_slope") @ArgPrefixed @ArgDefaultNull ObjectTag maxSlopeArg,
+            @ArgName("step_height") @ArgPrefixed @ArgDefaultNull ObjectTag stepHeightArg,
+            @ArgName("walk_stairs") @ArgPrefixed @ArgDefaultNull ObjectTag walkStairsArg,
+            @ArgName("stick_to_floor") @ArgPrefixed @ArgDefaultNull ObjectTag stickToFloorArg,
+            @ArgName("push") @ArgPrefixed @ArgDefaultNull ObjectTag pushArg,
+            @ArgName("inner_body") @ArgPrefixed @ArgDefaultNull ObjectTag innerBodyArg,
+            @ArgName("group") @ArgPrefixed @ArgDefaultNull ObjectTag groupArg,
+            @ArgName("notify") @ArgPrefixed @ArgDefaultNull ObjectTag notifyArg,
+            @ArgName("tag") @ArgPrefixed @ArgDefaultNull ObjectTag tagArg,
+            @ArgName("player") @ArgPrefixed @ArgDefaultNull ObjectTag playerArg) {
+        ElementTag nameValue = nameArg != null ? nameArg : nameLinear;
+        ElementTag action = actionArg;
         if (action == null) {
             Debug.echoError(scriptEntry, "Missing action for physcharacter command.");
             return;
         }
-        String act = action.asString().toLowerCase();
-        String worldId = scriptEntry.hasObject("world") ? scriptEntry.getElement("world").asString() : null;
-        String name = scriptEntry.hasObject("name") ? scriptEntry.getElement("name").asString() : null;
+        String act = action.name().toLowerCase();
+        String worldId = (worldArg != null) ? worldArg.asString() : null;
+        String name = (nameValue != null) ? nameValue.asString() : null;
         try {
-            switch (act) {
-                case "create": {
+            switch (action) {
+                case CREATE: {
                     if (name == null) {
                         throw new PhysException("physcharacter create needs name:<id>.");
                     }
                     PhysWorld world = Args.world(worldId);
-                    CharacterDef def = buildDef(scriptEntry, name);
-                    if (scriptEntry.hasObject("at") || scriptEntry.hasObject("position")) {
-                        def.position = Args.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context);
+                    CharacterDef def = buildDef(scriptEntry, name, shapeArg, massArg, maxSlopeArg, stepHeightArg, walkStairsArg, stickToFloorArg, pushArg, innerBodyArg, gravityArg, groupArg, notifyArg, tagArg);
+                    if ((atArg != null) || (positionArg != null)) {
+                        def.position = Args.vec((atArg != null ? atArg : positionArg), scriptEntry.context);
                     }
-                    if (scriptEntry.hasObject("mode")) {
-                        def.mode = CharacterDef.Mode.valueOf(scriptEntry.getElement("mode").asString().toUpperCase());
+                    if (modeArg != null) {
+                        def.mode = modeArg;
                     }
                     world.createCharacter(def);
                     break;
                 }
-                case "attach": {
-                    PlayerTag playerTag = resolvePlayer(scriptEntry);
+                case ATTACH: {
+                    PlayerTag playerTag = resolvePlayer(scriptEntry, playerArg);
                     if (playerTag == null) {
                         throw new PhysException("physcharacter attach needs player:<player> or a linked player.");
                     }
@@ -126,51 +140,51 @@ public class PhysCharacterCommand extends AbstractCommand {
                     if (name == null) {
                         name = "controller_" + player.getName();
                     }
-                    CharacterDef def = buildDef(scriptEntry, name);
+                    CharacterDef def = buildDef(scriptEntry, name, shapeArg, massArg, maxSlopeArg, stepHeightArg, walkStairsArg, stickToFloorArg, pushArg, innerBodyArg, gravityArg, groupArg, notifyArg, tagArg);
                     def.walkStairs = false;
                     def.stickToFloor = false;
                     services.controllers.attach(player, worldId, def);
                     break;
                 }
-                case "detach": {
-                    PlayerTag playerTag = resolvePlayer(scriptEntry);
+                case DETACH: {
+                    PlayerTag playerTag = resolvePlayer(scriptEntry, playerArg);
                     if (playerTag == null) {
                         throw new PhysException("physcharacter detach needs player:<player> or a linked player.");
                     }
                     PhysizenServices.get().controllers.detach(playerTag.getUUID(), worldId, name);
                     break;
                 }
-                case "remove": {
+                case REMOVE: {
                     if (name == null) {
                         throw new PhysException("physcharacter remove needs name:<id>.");
                     }
                     Args.world(worldId).removeCharacter(name);
                     break;
                 }
-                case "move": {
-                    character(worldId, name).move(Args.vec(scriptEntry.getObjectTag("velocity"), scriptEntry.context));
+                case MOVE: {
+                    character(worldId, name).move(Args.vec(velocityArg, scriptEntry.context));
                     break;
                 }
-                case "jump": {
-                    character(worldId, name).jump(Args.num(scriptEntry.getObjectTag("speed"), 6.0));
+                case JUMP: {
+                    character(worldId, name).jump(Args.num(speedArg, 6.0));
                     break;
                 }
-                case "set": {
+                case SET: {
                     PhysCharacter c = character(worldId, name);
-                    if (scriptEntry.hasObject("velocity")) {
-                        c.setVelocity(Args.vec(scriptEntry.getObjectTag("velocity"), scriptEntry.context));
+                    if (velocityArg != null) {
+                        c.setVelocity(Args.vec(velocityArg, scriptEntry.context));
                     }
-                    if (scriptEntry.hasObject("impulse")) {
-                        c.addImpulse(Args.vec(scriptEntry.getObjectTag("impulse"), scriptEntry.context));
+                    if (impulseArg != null) {
+                        c.addImpulse(Args.vec(impulseArg, scriptEntry.context));
                     }
-                    if (scriptEntry.hasObject("gravity")) {
-                        c.setGravityFactor(Args.num(scriptEntry.getObjectTag("gravity"), 1.0));
+                    if (gravityArg != null) {
+                        c.setGravityFactor(Args.num(gravityArg, 1.0));
                     }
                     break;
                 }
-                case "teleport": {
-                    double[] at = Args.vec(scriptEntry.getObjectTag(scriptEntry.hasObject("at") ? "at" : "position"), scriptEntry.context);
-                    double[] rot = scriptEntry.hasObject("rotation") ? Args.rotation(scriptEntry.getObjectTag("rotation"), scriptEntry.context) : null;
+                case TELEPORT: {
+                    double[] at = Args.vec((atArg != null ? atArg : positionArg), scriptEntry.context);
+                    double[] rot = (rotationArg != null) ? Args.rotation(rotationArg, scriptEntry.context) : null;
                     character(worldId, name).teleport(at, rot);
                     break;
                 }
@@ -183,6 +197,7 @@ public class PhysCharacterCommand extends AbstractCommand {
         }
     }
 
+
     private static PhysCharacter character(String worldId, String name) {
         if (name == null) {
             throw new PhysException("This physcharacter action needs name:<id>.");
@@ -194,29 +209,29 @@ public class PhysCharacterCommand extends AbstractCommand {
         return c;
     }
 
-    private static CharacterDef buildDef(ScriptEntry scriptEntry, String name) {
+    private static CharacterDef buildDef(ScriptEntry scriptEntry, String name, ObjectTag shapeArg, ObjectTag massArg, ObjectTag maxSlopeArg, ObjectTag stepHeightArg, ObjectTag walkStairsArg, ObjectTag stickToFloorArg, ObjectTag pushArg, ObjectTag innerBodyArg, ObjectTag gravityArg, ObjectTag groupArg, ObjectTag notifyArg, ObjectTag tagArg) {
         CharacterDef def = new CharacterDef();
         def.name = name;
-        if (scriptEntry.hasObject("shape")) {
-            def.shape = ShapeParser.shape(scriptEntry.getObjectTag("shape"), scriptEntry.context);
+        if (shapeArg != null) {
+            def.shape = ShapeParser.shape(shapeArg, scriptEntry.context);
         }
-        def.mass = Args.num(scriptEntry.getObjectTag("mass"), 70);
-        def.maxSlopeDegrees = Args.num(scriptEntry.getObjectTag("max_slope"), 50);
-        def.stepHeight = Args.num(scriptEntry.getObjectTag("step_height"), 0.6);
-        def.walkStairs = Args.bool(scriptEntry.getObjectTag("walk_stairs"), true);
-        def.stickToFloor = Args.bool(scriptEntry.getObjectTag("stick_to_floor"), true);
-        def.pushBodies = Args.bool(scriptEntry.getObjectTag("push"), true);
-        def.innerBody = Args.bool(scriptEntry.getObjectTag("inner_body"), true);
-        def.gravityFactor = Args.num(scriptEntry.getObjectTag("gravity"), 1.0);
-        def.group = (int) Args.num(scriptEntry.getObjectTag("group"), 0);
-        def.notify = Args.bool(scriptEntry.getObjectTag("notify"), true);
-        def.tag = Args.str(scriptEntry.getObjectTag("tag"), "");
+        def.mass = Args.num(massArg, 70);
+        def.maxSlopeDegrees = Args.num(maxSlopeArg, 50);
+        def.stepHeight = Args.num(stepHeightArg, 0.6);
+        def.walkStairs = Args.bool(walkStairsArg, true);
+        def.stickToFloor = Args.bool(stickToFloorArg, true);
+        def.pushBodies = Args.bool(pushArg, true);
+        def.innerBody = Args.bool(innerBodyArg, true);
+        def.gravityFactor = Args.num(gravityArg, 1.0);
+        def.group = (int) Args.num(groupArg, 0);
+        def.notify = Args.bool(notifyArg, true);
+        def.tag = Args.str(tagArg, "");
         return def;
     }
 
-    private static PlayerTag resolvePlayer(ScriptEntry scriptEntry) {
-        if (scriptEntry.hasObject("player")) {
-            ObjectTag tag = scriptEntry.getObjectTag("player");
+    private static PlayerTag resolvePlayer(ScriptEntry scriptEntry, ObjectTag playerArg) {
+        if (playerArg != null) {
+            ObjectTag tag = playerArg;
             if (tag instanceof PlayerTag) {
                 return (PlayerTag) tag;
             }
