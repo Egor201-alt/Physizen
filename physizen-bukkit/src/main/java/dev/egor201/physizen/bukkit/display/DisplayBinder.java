@@ -226,17 +226,6 @@ public class DisplayBinder {
         return new ArrayList<>(list);
         }
 
-    private static boolean moved(Entity entity, Location target) {
-        Location current = entity.getLocation();
-        if (current.getWorld() != target.getWorld()) {
-            return true;
-        }
-        double dx = current.getX() - target.getX();
-        double dy = current.getY() - target.getY();
-        double dz = current.getZ() - target.getZ();
-        return dx * dx + dy * dy + dz * dz > 1.0e-6;
-    }
-
     public void applyPose(Binding b, Location bodyLoc, Quaternionf bodyRot) {
         if (b.entity instanceof Display) {
             Display d = (Display) b.entity;
@@ -280,15 +269,11 @@ public class DisplayBinder {
             }
 
             d.setTeleportDuration(b.teleportDuration);
-            if (moved(d, bodyLoc)) {
-                d.teleport(bodyLoc);
-            }
+            d.teleport(bodyLoc);
         } else {
             Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset));
             Location target = bodyLoc.clone().add(worldOffset.x, worldOffset.y, worldOffset.z);
-            if (moved(b.entity, target)) {
-                b.entity.teleport(target);
-            }
+            b.entity.teleport(target);
         }
     }
 
