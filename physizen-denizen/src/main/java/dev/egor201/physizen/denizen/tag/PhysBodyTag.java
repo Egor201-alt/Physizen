@@ -1,8 +1,5 @@
 package dev.egor201.physizen.denizen.tag;
 
-import dev.egor201.physizen.denizen.args.Args;
-import dev.egor201.physizen.denizen.args.ShapeParser;
-
 import com.denizenscript.denizen.objects.EntityTag;
 import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizen.objects.PlayerTag;
@@ -10,17 +7,16 @@ import com.denizenscript.denizencore.objects.Fetchable;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
 import com.denizenscript.denizencore.objects.core.ListTag;
-import com.denizenscript.denizencore.objects.core.QuaternionTag;
 import com.denizenscript.denizencore.objects.core.MapTag;
+import com.denizenscript.denizencore.objects.core.QuaternionTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
 import dev.egor201.physizen.bukkit.PhysizenServices;
-import dev.egor201.physizen.denizen.DenizenServices;
+import dev.egor201.physizen.core.model.Snapshot;
 import dev.egor201.physizen.core.world.PhysBody;
 import dev.egor201.physizen.core.world.PhysEngine;
 import dev.egor201.physizen.core.world.PhysWorld;
-import dev.egor201.physizen.core.model.Snapshot;
 import org.bukkit.World;
 import org.bukkit.entity.Entity;
 
@@ -31,17 +27,19 @@ import java.util.UUID;
 // @name PhysBodyTag
 // @prefix physbody
 // @base ElementTag
-// @format physbody@<world>/<name>
+// @format
+// The identity format for PhysBodyTag is "<world>/<name>", for example "physbody@arena/crate1".
+//
 // @description
-// Represents a simulated physical body within a Physizen physics world.
+// A PhysBodyTag represents a simulated rigid body within a Physizen physics world.
+// Tags on this object only read published snapshots and are safe to use from async queues.
 // -->
 public class PhysBodyTag implements ObjectTag {
 
-    public static ObjectTagProcessor<PhysBodyTag> tagProcessor = new ObjectTagProcessor<>();
+    public static final ObjectTagProcessor<PhysBodyTag> tagProcessor = new ObjectTagProcessor<>();
 
     public final String worldId;
     public final String name;
-    private String prefix = "PhysBody";
 
     public PhysBodyTag(String worldId, String name) {
         this.worldId = worldId;
@@ -436,6 +434,7 @@ public class PhysBodyTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ElementTag.class, ElementTag.class, "is_touching", (attribute, object, param) -> {
+            if (param == null) return null;
             PhysBody b = object.body();
             if (b == null) return null;
             String wanted = param.asString();
@@ -571,23 +570,17 @@ public class PhysBodyTag implements ObjectTag {
     }
 
     @Override
-    public String identifySimple() {
-        return identify();
-    }
-
-    @Override
     public String toString() {
         return identify();
     }
 
     @Override
     public String getPrefix() {
-        return prefix;
+        return "PhysBody";
     }
 
     @Override
     public ObjectTag setPrefix(String prefix) {
-        this.prefix = prefix;
         return this;
     }
 
@@ -599,5 +592,9 @@ public class PhysBodyTag implements ObjectTag {
     @Override
     public String debuggable() {
         return "<LG>physbody@<Y>" + worldId + "<LG>/<Y>" + name;
+    }
+    @Override
+    public String identifySimple() {
+        return identify();
     }
 }

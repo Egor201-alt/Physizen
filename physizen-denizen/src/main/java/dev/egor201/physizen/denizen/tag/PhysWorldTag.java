@@ -1,8 +1,6 @@
 package dev.egor201.physizen.denizen.tag;
 
-import dev.egor201.physizen.denizen.args.Args;
-import dev.egor201.physizen.denizen.args.ShapeParser;
-
+import com.denizenscript.denizen.objects.LocationTag;
 import com.denizenscript.denizencore.objects.Fetchable;
 import com.denizenscript.denizencore.objects.ObjectTag;
 import com.denizenscript.denizencore.objects.core.ElementTag;
@@ -11,38 +9,38 @@ import com.denizenscript.denizencore.objects.core.MapTag;
 import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
-import com.denizenscript.denizencore.utilities.CoreUtilities;
+import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.model.ConstraintDef;
 import dev.egor201.physizen.core.model.FieldDef;
+import dev.egor201.physizen.core.model.QueryFilter;
+import dev.egor201.physizen.core.model.ShapeSpec;
+import dev.egor201.physizen.core.model.VehicleTelemetry;
 import dev.egor201.physizen.core.world.PhysBody;
 import dev.egor201.physizen.core.world.PhysCharacter;
 import dev.egor201.physizen.core.world.PhysEngine;
-import dev.egor201.physizen.core.PhysException;
 import dev.egor201.physizen.core.world.PhysWorld;
-import dev.egor201.physizen.core.model.QueryFilter;
-import dev.egor201.physizen.core.model.VehicleTelemetry;
 import dev.egor201.physizen.core.world.QueryHit;
-import dev.egor201.physizen.core.world.RayHit;
-import dev.egor201.physizen.core.model.ShapeSpec;
+import dev.egor201.physizen.denizen.args.Args;
+import dev.egor201.physizen.denizen.args.ShapeParser;
 
 import java.util.List;
 
+// <--[ObjectType]
+// @name PhysWorldTag
+// @prefix physworld
+// @base ElementTag
+// @format
+// The identity format for PhysWorldTag is the world id, for example "physworld@arena".
+//
+// @description
+// A PhysWorldTag represents a Physizen physics world, a Jolt simulation that runs on its own thread.
+// Tags on this object only read published snapshots and are safe to use from async queues.
+// -->
 public class PhysWorldTag implements ObjectTag {
 
-    // <--[ObjectType]
-    // @name PhysWorldTag
-    // @prefix physworld
-    // @base ElementTag
-    // @format
-    // The identity format for PhysWorldTag is the id of the physics world, for example "physworld@arena".
-    //
-    // @description
-    // A PhysWorldTag represents a Physizen physics world, a Jolt simulation that runs on its own thread.
-    // Tags on this object only read published snapshots and are safe to use from async queues.
-    // -->
+    public static final ObjectTagProcessor<PhysWorldTag> tagProcessor = new ObjectTagProcessor<>();
 
     public final String id;
-    private String prefix = "PhysWorld";
 
     public PhysWorldTag(String id) {
         this.id = id;
@@ -51,6 +49,10 @@ public class PhysWorldTag implements ObjectTag {
     public PhysWorld world() {
         PhysEngine engine = PhysEngine.get();
         return engine == null ? null : engine.world(id);
+    }
+
+    public static boolean matches(String string) {
+        return string != null && string.startsWith("physworld@");
     }
 
     @Fetchable("physworld")
@@ -64,28 +66,12 @@ public class PhysWorldTag implements ObjectTag {
         if (string.isEmpty() || string.contains("/")) {
             return null;
         }
-        PhysEngine engine = PhysEngine.get();
-        if (engine == null || engine.world(string) == null) {
-            return null;
-        }
         return new PhysWorldTag(string);
-    }
-
-    public static boolean matches(String string) {
-        if (CoreUtilities.toLowerCase(string).startsWith("physworld@")) {
-            return true;
-        }
-        return valueOf(string, CoreUtilities.noDebugContext) != null;
     }
 
     @Override
     public String identify() {
         return "physworld@" + id;
-    }
-
-    @Override
-    public String identifySimple() {
-        return identify();
     }
 
     @Override
@@ -95,12 +81,11 @@ public class PhysWorldTag implements ObjectTag {
 
     @Override
     public String getPrefix() {
-        return prefix;
+        return "PhysWorld";
     }
 
     @Override
     public ObjectTag setPrefix(String prefix) {
-        this.prefix = prefix;
         return this;
     }
 
@@ -114,11 +99,14 @@ public class PhysWorldTag implements ObjectTag {
         return true;
     }
 
-    public static ObjectTagProcessor<PhysWorldTag> tagProcessor = new ObjectTagProcessor<>();
-
     @Override
     public ObjectTag getObjectAttribute(Attribute attribute) {
         return tagProcessor.getObjectAttribute(this, attribute);
+    }
+
+    @Override
+    public String identifySimple() {
+        return identify();
     }
 
     private static QueryFilter filterOf(ListTag param, int index, TagContext context) {
@@ -226,7 +214,7 @@ public class PhysWorldTag implements ObjectTag {
         // Returns the gravity vector of this world in blocks per second squared.
         // @group Physizen
         // -->
-        tagProcessor.registerTag(ObjectTag.class, "gravity", (attribute, object) -> Args.tagVec(need(object).gravity()));
+        tagProcessor.registerTag(LocationTag.class, "gravity", (attribute, object) -> (LocationTag) Args.tagVec(need(object).gravity()));
 
         // <--[tag]
         // @attribute <PhysWorldTag.time_scale>
@@ -296,6 +284,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(PhysBodyTag.class, ElementTag.class, "body", (attribute, object, param) -> {
+            if (param == null) return null;
             PhysBody body = need(object).body(param.asString());
             return body == null || body.isRemoved() ? null : new PhysBodyTag(object.id, body.name);
         });
@@ -317,6 +306,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ElementTag.class, ElementTag.class, "constraint_type", (attribute, object, param) -> {
+            if (param == null) return null;
             ConstraintDef def = need(object).constraintDef(param.asString());
             return def == null ? null : new ElementTag(def.kind.name());
         });
@@ -329,6 +319,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ElementTag.class, ElementTag.class, "constraint_angle", (attribute, object, param) -> {
+            if (param == null) return null;
             Double angle = need(object).constraintAngle(param.asString());
             return angle == null ? null : new ElementTag(angle);
         });
@@ -341,6 +332,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ElementTag.class, ElementTag.class, "constraint_position", (attribute, object, param) -> {
+            if (param == null) return null;
             Double pos = need(object).constraintPosition(param.asString());
             return pos == null ? null : new ElementTag(pos);
         });
@@ -353,6 +345,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(MapTag.class, ElementTag.class, "constraint_motor", (attribute, object, param) -> {
+            if (param == null) return null;
             ConstraintDef def = need(object).constraintDef(param.asString());
             if (def == null || (def.kind != ConstraintDef.Kind.HINGE && def.kind != ConstraintDef.Kind.SLIDER)) {
                 return null;
@@ -409,6 +402,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(PhysCharacterTag.class, ElementTag.class, "character", (attribute, object, param) -> {
+            if (param == null) return null;
             PhysCharacter c = need(object).character(param.asString());
             if (c == null) return null;
             return new PhysCharacterTag(object.id, c.name);
@@ -446,6 +440,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ElementTag.class, "ragdoll_parts", (attribute, object, param) -> {
+            if (param == null) return null;
             ListTag list = new ListTag();
             for (String name : need(object).ragdollParts(param.asString())) {
                 list.addObject(new PhysBodyTag(object.id, name));
@@ -470,6 +465,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(MapTag.class, ElementTag.class, "vehicle_info", (attribute, object, param) -> {
+            if (param == null) return null;
             PhysWorld world = need(object);
             VehicleTelemetry t = world.vehicleTelemetry(param.asString());
             if (t == null) {
@@ -512,6 +508,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ElementTag.class, "bodies_with_tag", (attribute, object, param) -> {
+            if (param == null) return null;
             String wanted = param.asString();
             ListTag list = new ListTag();
             for (PhysBody body : need(object).bodies()) {
@@ -557,7 +554,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "bodies_in_radius", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<center>|<radius>].");
                 return null;
             }
@@ -578,7 +575,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "bodies_in_box", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<min>|<max>].");
                 return null;
             }
@@ -602,7 +599,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(MapTag.class, ListTag.class, "ray_cast", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<origin>|<direction>|(<max_distance>)|(<options>)].");
                 return null;
             }
@@ -624,7 +621,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "ray_cast_all", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<origin>|<direction>|(<max_distance>)|(<options>)].");
                 return null;
             }
@@ -638,12 +635,12 @@ public class PhysWorldTag implements ObjectTag {
         // @attribute <PhysWorldTag.shape_cast[<shape>|<origin>|<direction>|(<max_distance>)|(<options>)]>
         // @returns MapTag
         // @description
-        // Sweeps a shape (a shape map such as [type=sphere;radius=0.5]) along a direction and returns the first thing it touches as a map with "hit", and when hit "body" (or "terrain"), "point", "normal", "distance" (how far the shape travelled), "fraction", "depth" and "inside" (true if the shape already overlapped at the start).
-        // The shape's position is its center. Options are the same as ray_cast, plus rotation (a quaternion for the shape). Mesh shapes are not allowed.
+        // Sweeps a shape along a direction and returns the first thing it touches as a map.
+        // Options are the same as ray_cast, plus rotation (quaternion). Mesh shapes are not allowed.
         // @group Physizen
         // -->
         tagProcessor.registerTag(MapTag.class, ListTag.class, "shape_cast", (attribute, object, param) -> {
-            if (param.size() < 3) {
+            if (param == null || param.size() < 3) {
                 attribute.echoError("Expected [<shape>|<origin>|<direction>|(<max_distance>)|(<options>)].");
                 return null;
             }
@@ -671,7 +668,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "shape_cast_all", (attribute, object, param) -> {
-            if (param.size() < 3) {
+            if (param == null || param.size() < 3) {
                 attribute.echoError("Expected [<shape>|<origin>|<direction>|(<max_distance>)|(<options>)].");
                 return null;
             }
@@ -692,12 +689,11 @@ public class PhysWorldTag implements ObjectTag {
         // @attribute <PhysWorldTag.overlap[<shape>|<position>|(<options>)]>
         // @returns ListTag(MapTag)
         // @description
-        // Returns every body overlapping the shape placed at the position (its center), deepest first. Each entry has "body" (or "terrain"), "point" (contact point on the other body), "normal" (pointing toward the shape) and "depth" (penetration depth).
-        // Options are the same as shape_cast.
+        // Returns every body overlapping the shape placed at the position (its center), deepest first.
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "overlap", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<shape>|<position>|(<options>)].");
                 return null;
             }
@@ -720,7 +716,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "overlap_sphere", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<center>|<radius>|(<options>)].");
                 return null;
             }
@@ -739,7 +735,7 @@ public class PhysWorldTag implements ObjectTag {
         // @group Physizen
         // -->
         tagProcessor.registerTag(ListTag.class, ListTag.class, "overlap_box", (attribute, object, param) -> {
-            if (param.size() < 2) {
+            if (param == null || param.size() < 2) {
                 attribute.echoError("Expected [<center>|<size>|(<options>)].");
                 return null;
             }

@@ -10,7 +10,9 @@ import com.denizenscript.denizencore.tags.Attribute;
 import com.denizenscript.denizencore.tags.ObjectTagProcessor;
 import com.denizenscript.denizencore.tags.TagContext;
 import dev.egor201.physizen.bukkit.PhysizenServices;
+import dev.egor201.physizen.core.model.CharacterDef;
 import dev.egor201.physizen.core.world.CharacterState;
+import dev.egor201.physizen.core.world.PhysBody;
 import dev.egor201.physizen.core.world.PhysCharacter;
 import dev.egor201.physizen.core.world.PhysEngine;
 import dev.egor201.physizen.core.world.PhysWorld;
@@ -23,19 +25,18 @@ import java.util.UUID;
 // @prefix physcharacter
 // @base ElementTag
 // @format
-// The identity format for a PhysCharacterTag is <world_id>/<name>, for example 'main/hero'.
+// The identity format for PhysCharacterTag is "<world>/<name>", for example "physcharacter@arena/guard".
 //
 // @description
-// Represents a CharacterVirtual controller (a capsule that walks over terrain and physics bodies, climbs stairs, stands on moving platforms and pushes dynamic bodies) in a Physizen world.
-// A character that has an inner body is also available as a PhysBodyTag with the same name, so it triggers sensor zones.
+// A PhysCharacterTag represents a CharacterVirtual controller in a Physizen physics world.
+// Tags on this object only read published states and are safe to use from async queues.
 // -->
 public class PhysCharacterTag implements ObjectTag {
 
-    public static ObjectTagProcessor<PhysCharacterTag> tagProcessor = new ObjectTagProcessor<>();
+    public static final ObjectTagProcessor<PhysCharacterTag> tagProcessor = new ObjectTagProcessor<>();
 
     public final String worldId;
     public final String name;
-    private String prefix = "PhysCharacter";
 
     public PhysCharacterTag(String worldId, String name) {
         this.worldId = worldId;
@@ -306,7 +307,7 @@ public class PhysCharacterTag implements ObjectTag {
         tagProcessor.registerTag(ElementTag.class, "is_tracking", (attribute, object) -> {
             PhysCharacter c = object.character();
             if (c == null) return null;
-            return new ElementTag(c.def.mode == dev.egor201.physizen.core.model.CharacterDef.Mode.TRACK);
+            return new ElementTag(c.def.mode == CharacterDef.Mode.TRACK);
         });
 
         // <--[tag]
@@ -346,7 +347,7 @@ public class PhysCharacterTag implements ObjectTag {
             PhysCharacter c = object.character();
             if (c == null || c.body() == null) return null;
             ListTag list = new ListTag();
-            for (dev.egor201.physizen.core.world.PhysBody zone : c.body().sensorsHolding()) {
+            for (PhysBody zone : c.body().sensorsHolding()) {
                 list.addObject(new PhysBodyTag(object.worldId, zone.name));
             }
             return list;
@@ -373,23 +374,17 @@ public class PhysCharacterTag implements ObjectTag {
     }
 
     @Override
-    public String identifySimple() {
-        return identify();
-    }
-
-    @Override
     public String toString() {
         return identify();
     }
 
     @Override
     public String getPrefix() {
-        return prefix;
+        return "PhysCharacter";
     }
 
     @Override
     public ObjectTag setPrefix(String prefix) {
-        this.prefix = prefix;
         return this;
     }
 
@@ -401,5 +396,9 @@ public class PhysCharacterTag implements ObjectTag {
     @Override
     public String debuggable() {
         return "<LG>physcharacter@<Y>" + worldId + "<LG>/<Y>" + name;
+    }
+    @Override
+    public String identifySimple() {
+        return identify();
     }
 }
