@@ -92,7 +92,14 @@ public class TerrainManager implements Listener {
     private final WorldLinks links;
     private final Logger logger;
     private final Map<TileKey, TileData> activeTiles = new ConcurrentHashMap<>();
-    private final Map<BlockData, List<BoundingBox>> shapeCache = new ConcurrentHashMap<>();
+    private static final int SHAPE_CACHE_LIMIT = 4096;
+    private static final Set<Material> OFFSET_SHAPES = EnumSet.of(Material.BAMBOO, Material.POINTED_DRIPSTONE);
+    private final Map<BlockData, List<BoundingBox>> shapeCache = Collections.synchronizedMap(new LinkedHashMap<>(512, 0.75f, true) {
+        @Override
+        protected boolean removeEldestEntry(Map.Entry<BlockData, List<BoundingBox>> eldest) {
+            return size() > SHAPE_CACHE_LIMIT;
+        }
+    });
     private final Set<TileKey> dirtyTiles = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final Map<Long, ChunkSnapshot> snapshotCache = new HashMap<>();
 
@@ -595,7 +602,8 @@ public class TerrainManager implements Listener {
     }
 
     private List<BoundingBox> getBlockBoxes(BlockData data, World world, int x, int y, int z) {
-        List<BoundingBox> cached = shapeCache.get(data);
+        boolean cacheable = !OFFSET_SHAPES.contains(data.getMaterial());
+        List<BoundingBox> cached = cacheable ? shapeCache.get(data) : null;
         if (cached != null) return cached;
 
         Location loc = new Location(world, x, y, z);
@@ -610,7 +618,7 @@ public class TerrainManager implements Listener {
             ));
         }
 
-        if (shapeCache.size() < 4096) {
+        if (cacheable) {
             shapeCache.put(data, normalized);
         }
         return normalized;

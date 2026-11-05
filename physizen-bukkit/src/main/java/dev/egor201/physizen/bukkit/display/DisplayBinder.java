@@ -16,6 +16,7 @@ import org.bukkit.util.Transformation;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class DisplayBinder {
 
@@ -74,7 +75,7 @@ public class DisplayBinder {
 
     public void bind(String worldId, String bodyName, Binding binding) {
         BodyKey key = new BodyKey(worldId, bodyName);
-        List<Binding> list = bindings.computeIfAbsent(key, k -> Collections.synchronizedList(new ArrayList<>()));
+        List<Binding> list = bindings.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>());
         list.removeIf(existing -> existing.entity.getUniqueId().equals(binding.entity.getUniqueId()));
         list.add(binding);
         lastSteps.remove(key);
@@ -106,14 +107,12 @@ public class DisplayBinder {
         if (list == null) {
             return null;
         }
-        synchronized (list) {
-            for (Binding b : list) {
-                if (b.entity.getUniqueId().equals(entityUuid)) {
-                    return b;
-                }
+        for (Binding b : list) {
+            if (b.entity.getUniqueId().equals(entityUuid)) {
+                return b;
             }
         }
-        return null;
+            return null;
     }
 
     public boolean isBound(String worldId, String bodyName, UUID entityUuid) {
@@ -123,10 +122,8 @@ public class DisplayBinder {
     public void forEachBinding(Visitor visitor) {
         for (Map.Entry<BodyKey, List<Binding>> entry : bindings.entrySet()) {
             List<Binding> copy;
-            synchronized (entry.getValue()) {
-                copy = new ArrayList<>(entry.getValue());
-            }
-            for (Binding b : copy) {
+            copy = new ArrayList<>(entry.getValue());
+                    for (Binding b : copy) {
                 visitor.visit(entry.getKey().worldId, entry.getKey().bodyName, b);
             }
         }
@@ -139,11 +136,9 @@ public class DisplayBinder {
             return 0;
         }
         int left;
-        synchronized (list) {
-            list.removeIf(b -> b.entity.getUniqueId().equals(entityUuid));
-            left = list.size();
-        }
-        if (left == 0) {
+        list.removeIf(b -> b.entity.getUniqueId().equals(entityUuid));
+        left = list.size();
+            if (left == 0) {
             bindings.remove(key);
             lastSteps.remove(key);
         }
@@ -154,14 +149,12 @@ public class DisplayBinder {
         BodyKey key = new BodyKey(worldId, bodyName);
         List<Binding> list = bindings.get(key);
         if (list != null) {
-            synchronized (list) {
-                for (Binding b : list) {
-                    if (b.entity.getUniqueId().equals(entityUuid)) {
-                        forget(b.entity);
-                    }
+            for (Binding b : list) {
+                if (b.entity.getUniqueId().equals(entityUuid)) {
+                    forget(b.entity);
                 }
             }
-            list.removeIf(b -> b.entity.getUniqueId().equals(entityUuid));
+                    list.removeIf(b -> b.entity.getUniqueId().equals(entityUuid));
             if (list.isEmpty()) {
                 bindings.remove(key);
                 lastSteps.remove(key);
@@ -192,14 +185,12 @@ public class DisplayBinder {
         if (list == null) {
             return;
         }
-        synchronized (list) {
-            for (Binding b : list) {
-                b.scale.mul((float) factor);
-                b.offset.mul((float) factor);
-                b.lastSentRot.set(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
-            }
+        for (Binding b : list) {
+            b.scale.mul((float) factor);
+            b.offset.mul((float) factor);
+            b.lastSentRot.set(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
         }
-        lastSteps.remove(key);
+            lastSteps.remove(key);
     }
 
     public void setScale(String worldId, String bodyName, Vector3f scale) {
@@ -208,13 +199,11 @@ public class DisplayBinder {
         if (list == null) {
             return;
         }
-        synchronized (list) {
-            for (Binding b : list) {
-                b.scale.set(scale);
-                b.lastSentRot.set(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
-            }
+        for (Binding b : list) {
+            b.scale.set(scale);
+            b.lastSentRot.set(Float.NaN, Float.NaN, Float.NaN, Float.NaN);
         }
-        lastSteps.remove(key);
+            lastSteps.remove(key);
     }
 
     public List<Entity> getBoundDisplays(String worldId, String bodyName) {
@@ -222,23 +211,30 @@ public class DisplayBinder {
         List<Binding> list = bindings.get(key);
         if (list == null) return Collections.emptyList();
         List<Entity> result = new ArrayList<>();
-        synchronized (list) {
-            for (Binding b : list) {
-                if (b.entity.isValid()) {
-                    result.add(b.entity);
-                }
+        for (Binding b : list) {
+            if (b.entity.isValid()) {
+                result.add(b.entity);
             }
         }
-        return result;
+            return result;
     }
 
     public List<Binding> getBindings(String worldId, String bodyName) {
         BodyKey key = new BodyKey(worldId, bodyName);
         List<Binding> list = bindings.get(key);
         if (list == null) return Collections.emptyList();
-        synchronized (list) {
-            return new ArrayList<>(list);
+        return new ArrayList<>(list);
         }
+
+    private static boolean moved(Entity entity, Location target) {
+        Location current = entity.getLocation();
+        if (current.getWorld() != target.getWorld()) {
+            return true;
+        }
+        double dx = current.getX() - target.getX();
+        double dy = current.getY() - target.getY();
+        double dz = current.getZ() - target.getZ();
+        return dx * dx + dy * dy + dz * dz > 1.0e-6;
     }
 
     public void applyPose(Binding b, Location bodyLoc, Quaternionf bodyRot) {
@@ -284,11 +280,15 @@ public class DisplayBinder {
             }
 
             d.setTeleportDuration(b.teleportDuration);
-            d.teleport(bodyLoc);
+            if (moved(d, bodyLoc)) {
+                d.teleport(bodyLoc);
+            }
         } else {
             Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset));
             Location target = bodyLoc.clone().add(worldOffset.x, worldOffset.y, worldOffset.z);
-            b.entity.teleport(target);
+            if (moved(b.entity, target)) {
+                b.entity.teleport(target);
+            }
         }
     }
 
@@ -306,17 +306,15 @@ public class DisplayBinder {
             PhysBody body = world != null ? world.body(key.bodyName) : null;
 
             if (body == null || body.isRemoved()) {
-                synchronized (list) {
-                    for (Binding b : list) {
-                        if (b.removeWithBody && b.entity.isValid()) {
-                            b.entity.remove();
-                        }
-                        else {
-                            forget(b.entity);
-                        }
+                for (Binding b : list) {
+                    if (b.removeWithBody && b.entity.isValid()) {
+                        b.entity.remove();
+                    }
+                    else {
+                        forget(b.entity);
                     }
                 }
-                dropPending(key.worldId, key.bodyName);
+                            dropPending(key.worldId, key.bodyName);
                 it.remove();
                 lastSteps.remove(key);
                 continue;
@@ -335,18 +333,14 @@ public class DisplayBinder {
             Quaternionf bodyRot = new Quaternionf(snapshot.qx, snapshot.qy, snapshot.qz, snapshot.qw);
             Location bodyLoc = new Location(bukkitWorld, snapshot.px, snapshot.py, snapshot.pz);
 
-            synchronized (list) {
-                Iterator<Binding> bIt = list.iterator();
-                while (bIt.hasNext()) {
-                    Binding b = bIt.next();
-                    if (!b.entity.isValid()) {
-                        bIt.remove();
-                        continue;
-                    }
-
-                    applyPose(b, bodyLoc, bodyRot);
+            for (Binding b : list) {
+                if (!b.entity.isValid()) {
+                    list.remove(b);
+                    continue;
                 }
+
+                applyPose(b, bodyLoc, bodyRot);
             }
-        }
+                }
     }
 }

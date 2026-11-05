@@ -9,11 +9,11 @@ import org.bukkit.World;
 import org.joml.Quaternionf;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class WheelBinder {
 
@@ -32,20 +32,18 @@ public class WheelBinder {
 
     public void bind(String worldId, String vehicle, List<DisplayBinder.Binding> perWheel) {
         unbind(worldId, vehicle);
-        wheels.put(key(worldId, vehicle), Collections.synchronizedList(new ArrayList<>(perWheel)));
+        wheels.put(key(worldId, vehicle), new CopyOnWriteArrayList<>(perWheel));
     }
 
     public void unbind(String worldId, String vehicle) {
         List<DisplayBinder.Binding> old = wheels.remove(key(worldId, vehicle));
         if (old != null) {
-            synchronized (old) {
-                for (DisplayBinder.Binding b : old) {
-                    if (b != null && b.removeWithBody && b.entity.isValid()) {
-                        b.entity.remove();
-                    }
+            for (DisplayBinder.Binding b : old) {
+                if (b != null && b.removeWithBody && b.entity.isValid()) {
+                    b.entity.remove();
                 }
             }
-        }
+                }
     }
 
     public int count() {
@@ -54,7 +52,8 @@ public class WheelBinder {
 
     public void clear() {
         for (String k : new ArrayList<>(wheels.keySet())) {
-            wheels.remove(k);
+            String[] parts = k.split("\u0000", 2);
+            unbind(parts[0], parts[1]);
         }
     }
 
@@ -71,33 +70,29 @@ public class WheelBinder {
             VehicleTelemetry t = world != null ? world.vehicleTelemetry(parts[1]) : null;
             List<DisplayBinder.Binding> list = entry.getValue();
             if (t == null) {
-                synchronized (list) {
-                    for (DisplayBinder.Binding b : list) {
-                        if (b != null && b.removeWithBody && b.entity.isValid()) {
-                            b.entity.remove();
-                        }
+                for (DisplayBinder.Binding b : list) {
+                    if (b != null && b.removeWithBody && b.entity.isValid()) {
+                        b.entity.remove();
                     }
                 }
-                it.remove();
+                            it.remove();
                 continue;
             }
             World bukkitWorld = links.get(parts[0]);
             if (bukkitWorld == null) {
                 continue;
             }
-            synchronized (list) {
-                int n = Math.min(list.size(), t.wheelCount);
-                for (int i = 0; i < n; i++) {
-                    DisplayBinder.Binding b = list.get(i);
-                    if (b == null || !b.entity.isValid()) {
-                        continue;
-                    }
-                    double[] p = t.wheelPos[i];
-                    double[] r = t.wheelRot[i];
-                    Location loc = new Location(bukkitWorld, p[0], p[1], p[2]);
-                    displays.applyPose(b, loc, new Quaternionf((float) r[0], (float) r[1], (float) r[2], (float) r[3]));
+            int n = Math.min(list.size(), t.wheelCount);
+            for (int i = 0; i < n; i++) {
+                DisplayBinder.Binding b = list.get(i);
+                if (b == null || !b.entity.isValid()) {
+                    continue;
                 }
+                double[] p = t.wheelPos[i];
+                double[] r = t.wheelRot[i];
+                Location loc = new Location(bukkitWorld, p[0], p[1], p[2]);
+                displays.applyPose(b, loc, new Quaternionf((float) r[0], (float) r[1], (float) r[2], (float) r[3]));
             }
-        }
+                }
     }
 }

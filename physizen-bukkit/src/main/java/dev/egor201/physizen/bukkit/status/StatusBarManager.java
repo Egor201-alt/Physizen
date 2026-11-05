@@ -4,9 +4,9 @@ import dev.egor201.physizen.bukkit.display.DisplayBinder;
 import dev.egor201.physizen.core.world.PhysEngine;
 import dev.egor201.physizen.core.world.PhysWorld;
 import org.bukkit.Bukkit;
-import org.bukkit.boss.BarColor;
-import org.bukkit.boss.BarStyle;
-import org.bukkit.boss.BossBar;
+import net.kyori.adventure.bossbar.BossBar;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.minimessage.MiniMessage;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 import org.bukkit.event.EventHandler;
@@ -23,6 +23,7 @@ import java.util.function.IntSupplier;
 public class StatusBarManager implements Listener {
 
     private static final long UPDATE_TICKS = 10L;
+    private static final MiniMessage MM = MiniMessage.miniMessage();
 
     private final Plugin plugin;
     private final DisplayBinder displays;
@@ -42,17 +43,16 @@ public class StatusBarManager implements Listener {
     public boolean toggle(Player player) {
         BossBar[] existing = bars.remove(player.getUniqueId());
         if (existing != null) {
-            existing[0].removeAll();
-            existing[1].removeAll();
+            hide(player, existing);
             if (bars.isEmpty()) {
                 stop();
             }
             return false;
         }
-        BossBar load = Bukkit.createBossBar("Physizen", BarColor.GREEN, BarStyle.SEGMENTED_20);
-        BossBar objects = Bukkit.createBossBar("Physizen", BarColor.BLUE, BarStyle.SOLID);
-        load.addPlayer(player);
-        objects.addPlayer(player);
+        BossBar load = BossBar.bossBar(Component.text("Physizen"), 1.0f, BossBar.Color.GREEN, BossBar.Overlay.NOTCHED_20);
+        BossBar objects = BossBar.bossBar(Component.text("Physizen"), 1.0f, BossBar.Color.BLUE, BossBar.Overlay.NOTCHED_20);
+        player.showBossBar(load);
+        player.showBossBar(objects);
         bars.put(player.getUniqueId(), new BossBar[]{load, objects});
         if (task == null) {
             task = Bukkit.getScheduler().runTaskTimer(plugin, this::update, 0L, UPDATE_TICKS);
@@ -62,9 +62,11 @@ public class StatusBarManager implements Listener {
     }
 
     public void clear() {
-        for (BossBar[] pair : bars.values()) {
-            pair[0].removeAll();
-            pair[1].removeAll();
+        for (Map.Entry<UUID, BossBar[]> entry : bars.entrySet()) {
+            Player viewer = Bukkit.getPlayer(entry.getKey());
+            if (viewer != null) {
+                hide(viewer, entry.getValue());
+            }
         }
         bars.clear();
         stop();
@@ -84,8 +86,7 @@ public class StatusBarManager implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         BossBar[] pair = bars.remove(event.getPlayer().getUniqueId());
         if (pair != null) {
-            pair[0].removeAll();
-            pair[1].removeAll();
+            hide(event.getPlayer(), pair);
             if (bars.isEmpty()) {
                 stop();
             }
@@ -93,11 +94,20 @@ public class StatusBarManager implements Listener {
     }
 
     private static String colorCode(double load) {
-        return load < 0.5 ? "§a" : load < 0.8 ? "§e" : "§c";
+        return load < 0.5 ? "green" : load < 0.8 ? "yellow" : "red";
     }
 
-    private static BarColor barColor(double load) {
-        return load < 0.5 ? BarColor.GREEN : load < 0.8 ? BarColor.YELLOW : BarColor.RED;
+    private static String val(String color, String text) {
+        return "<" + color + ">" + text + "</" + color + ">";
+    }
+
+    private static void hide(Player player, BossBar[] pair) {
+        player.hideBossBar(pair[0]);
+        player.hideBossBar(pair[1]);
+    }
+
+    private static BossBar.Color barColor(double load) {
+        return load < 0.5 ? BossBar.Color.GREEN : load < 0.8 ? BossBar.Color.YELLOW : BossBar.Color.RED;
     }
 
     private void update() {
@@ -109,10 +119,10 @@ public class StatusBarManager implements Listener {
         String objectsTitle;
         double loadProgress = 0;
         double objectsProgress = 0;
-        BarColor loadColor = BarColor.RED;
+        BossBar.Color loadColor = BossBar.Color.RED;
         if (engine == null) {
-            loadTitle = "§b§lPhysizen §8» §cPhysics engine is offline";
-            objectsTitle = "§7No data";
+            loadTitle = "<red>Physics engine is offline</red>";
+            objectsTitle = "<gray>No data</gray>";
         }
         else {
             int worlds = 0;
@@ -169,23 +179,31 @@ public class StatusBarManager implements Listener {
             String c = colorCode(smoothLoad);
             loadColor = barColor(smoothLoad);
             loadProgress = shown;
-            String state = worlds > 0 && paused == worlds ? " §c§lPAUSED §8| " : " §8| ";
-            loadTitle = String.format(Locale.ROOT,
-                    "§b§lPhysizen §8»%s§7Load %s%d%% §8| §7Step §f%.2f§7/§f%.1f ms §8| §7Rate §f%.0f§7/§f%d Hz §8| §7Peak %s%d%%",
-                    state, c, Math.round(smoothLoad * 100), worstStep, worstBudget, worstHz, worstTarget, colorCode(peakLoad), Math.round(peakLoad * 100));
+            String state = worlds > 0 && paused == worlds ? "<red><bold>PAUSED</bold></red> " : "";
+            loadTitle = state + "<gray>Load: " + val(c, Math.round(smoothLoad * 100) + "%")
+                    + " Step: " + val(c, String.format(Locale.ROOT, "%.2f", worstStep)) + "/" + String.format(Locale.ROOT, "%.1f", worstBudget) + " ms"
+                    + " Rate: " + val(c, String.format(Locale.ROOT, "%.0f", worstHz)) + "/" + worstTarget + " Hz"
+                    + " Peak: " + val(colorCode(peakLoad), Math.round(peakLoad * 100) + "%");
             int displayCount = displays.totalBindings();
             int pendingCount = pending.getAsInt();
             objectsProgress = bodies > 0 ? (double) active / bodies : 0;
-            objectsTitle = String.format(Locale.ROOT,
-                    "§7Worlds §f%d §8| §7Bodies §e%d §8(§a%d §7active§8) §8| §7Constraints §e%d §8| §7Characters §e%d §8| §7Displays §e%d §8| §7Pending §e%d",
-                    worlds, bodies, active, constraints, characters, displayCount, pendingCount);
+            objectsTitle = "<gray>Worlds: " + val("white", String.valueOf(worlds))
+                    + " Bodies: " + val("yellow", String.valueOf(bodies)) + " (" + val("green", String.valueOf(active)) + " active)"
+                    + " Constraints: " + val("yellow", String.valueOf(constraints))
+                    + " Characters: " + val("yellow", String.valueOf(characters))
+                    + " Displays: " + val("yellow", String.valueOf(displayCount))
+                    + " Pending: " + val("yellow", String.valueOf(pendingCount));
         }
+        Component loadName = MM.deserialize(loadTitle);
+        Component objectsName = MM.deserialize(objectsTitle);
+        float loadValue = (float) Math.max(0.0, Math.min(1.0, loadProgress));
+        float objectsValue = (float) Math.max(0.0, Math.min(1.0, objectsProgress));
         for (BossBar[] pair : bars.values()) {
-            pair[0].setTitle(loadTitle);
-            pair[0].setColor(loadColor);
-            pair[0].setProgress(Math.max(0.0, Math.min(1.0, loadProgress)));
-            pair[1].setTitle(objectsTitle);
-            pair[1].setProgress(Math.max(0.0, Math.min(1.0, objectsProgress)));
+            pair[0].name(loadName);
+            pair[0].color(loadColor);
+            pair[0].progress(loadValue);
+            pair[1].name(objectsName);
+            pair[1].progress(objectsValue);
         }
     }
 }
