@@ -610,13 +610,7 @@ public class TerrainManager implements Listener {
         VoxelShape shape = data.getCollisionShape(loc);
         Collection<BoundingBox> raw = shape.getBoundingBoxes();
 
-        List<BoundingBox> normalized = new ArrayList<>();
-        for (BoundingBox b : raw) {
-            normalized.add(new BoundingBox(
-                    b.getMinX() - x, b.getMinY() - y, b.getMinZ() - z,
-                    b.getMaxX() - x, b.getMaxY() - y, b.getMaxZ() - z
-            ));
-        }
+        List<BoundingBox> normalized = new ArrayList<>(raw);
 
         if (cacheable) {
             shapeCache.put(data, normalized);
