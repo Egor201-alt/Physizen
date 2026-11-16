@@ -242,7 +242,8 @@ public class DisplayBinder {
             }
             b.lastAppliedRot.set(totalRot);
 
-            boolean rotChanged = Float.isNaN(b.lastSentRot.x)
+            boolean firstPose = Float.isNaN(b.lastSentRot.x);
+            boolean rotChanged = firstPose
                     || Math.abs(totalRot.x - b.lastSentRot.x) > 0.0005f
                     || Math.abs(totalRot.y - b.lastSentRot.y) > 0.0005f
                     || Math.abs(totalRot.z - b.lastSentRot.z) > 0.0005f
@@ -263,12 +264,23 @@ public class DisplayBinder {
 
                 Transformation transform = new Transformation(translation, totalRot, b.scale, new Quaternionf());
 
-                d.setInterpolationDelay(b.interpolationStart);
-                d.setInterpolationDuration(b.interpolationDuration);
+                int targetDuration = firstPose ? 0 : b.interpolationDuration;
+                if (targetDuration > 0) {
+                    d.setInterpolationDelay(b.interpolationStart == 0 ? -1 : 0);
+                    d.setInterpolationDelay(b.interpolationStart);
+                } else if (d.getInterpolationDelay() != 0) {
+                    d.setInterpolationDelay(0);
+                }
+                if (d.getInterpolationDuration() != targetDuration) {
+                    d.setInterpolationDuration(targetDuration);
+                }
                 d.setTransformation(transform);
             }
 
-            d.setTeleportDuration(b.teleportDuration);
+            int targetTpDuration = firstPose ? 0 : b.teleportDuration;
+            if (d.getTeleportDuration() != targetTpDuration) {
+                d.setTeleportDuration(targetTpDuration);
+            }
             d.teleport(bodyLoc);
         } else {
             Vector3f worldOffset = bodyRot.transform(new Vector3f(b.offset));
